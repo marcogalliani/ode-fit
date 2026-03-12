@@ -15,6 +15,9 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
     # State Cache
     last_theta = NULL,
     last_solver = NULL,
+
+    # Optimisation history: list of list(iter, params, sse)
+    history = NULL,
     
     initialize = function(func_rhs, times_sim, obs_times, obs_values, fixed_params, lambda, param_scales) {
       self$func_rhs <- func_rhs
@@ -25,6 +28,7 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
       self$lambda <- lambda
       self$inner_solver_class <- OdeSystemSolver
       self$param_scales <- param_scales
+      self$history <- list()
     },
     
     # --- Helper: Map vector to params ---
@@ -49,19 +53,29 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
           obs_times = self$obs_times, obs_values = self$obs_values,
           params = p_phys, lambda = self$lambda
         )
-        solver$optimize(y0 = NA, max_iter = 200) 
+        solver$optimize(y0 = NA, max_iter = 200)
         self$last_theta <- theta_norm
         self$last_solver <- solver
+
+        # Record this outer iteration
+        p_vals <- theta_norm * unlist(self$param_scales[param_names])
+        resid_rec <- solver$y - solver$observations_mapped
+        sse_rec   <- sum(resid_rec^2, na.rm = TRUE)
+        self$history[[length(self$history) + 1]] <- list(
+          iter   = length(self$history) + 1L,
+          params = setNames(p_vals, param_names),
+          sse    = sse_rec
+        )
       }
-      
+
       # Data Misfit (SSE)
       resid <- solver$y - solver$observations_mapped
       sse <- sum(resid^2, na.rm = TRUE)
-      
+
       # Log output
       p_vals <- theta_norm * unlist(self$param_scales[param_names])
       cat(sprintf("Iter | Params: %s | SSE: %.4f\n", paste(round(p_vals, 2), collapse=","), sse))
-      
+
       return(sse)
     },
     # Computation of
@@ -181,6 +195,8 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
         upper_norm <- upper_phys / unlist(self$param_scales[param_names])
       }
       
+      self$history <- list()   # reset trace for this run
+
       cat("=== Starting Constrained Parameter Cascading (L-BFGS-B) ===\n")
       cat("Initial Guess (Norm):", round(init_theta_norm, 4), "\n")
       

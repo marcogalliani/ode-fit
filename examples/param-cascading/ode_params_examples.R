@@ -3,6 +3,7 @@ library(gridExtra)
 library(reshape2)
 
 source("src/solvers/parameter_cascading.R")
+source("src/utils/trace_optimisation.R")
 
 # --- Shared utility: forward Euler integrator (consistent with OdeSystemSolver) ---
 euler_solve <- function(y0, times, func, params) {
@@ -19,20 +20,20 @@ euler_solve <- function(y0, times, func, params) {
 }
 
 
-# EXAMPLE 1: Exponential Decay ─ estimate k ----
-run_decay_example <- function(init_params = NULL) {
-  cat("\n=== Example 1: Exponential Decay — Estimating k ===\n")
+# EXAMPLE 1: Exponential Decay -- estimate k ----
+run_decay_example <- function(init_params = NULL, lambda = NULL) {
+  cat("\n=== Example 1: Exponential Decay - Estimating k ===\n")
 
   decay_rhs <- function(y, t, p) -p$k * y
 
   k_true  <- 0.5
   y0_true <- c(5.0)
 
-  times_obs <- seq(0, 10, by = 0.1)
-  times_sim <- sort(unique(c(seq(0, 10, by = 0.01), times_obs)))
-
-  # Ground truth + noise (use a clean fine grid for data generation)
+  times_obs  <- seq(0, 10, by = 0.1)
   times_fine <- seq(0, 10, by = 0.01)
+  times_sim  <- times_fine   # pass clean grid; solver will merge obs_times internally
+
+  # Ground truth + noise
   y_sim_fine <- euler_solve(y0_true, times_fine, decay_rhs, list(k = k_true))
   obs_idx    <- match(round(times_obs, 10), round(times_fine, 10))
   set.seed(42)
@@ -45,15 +46,11 @@ run_decay_example <- function(init_params = NULL) {
     obs_times    = times_obs,
     obs_values   = obs_data,
     fixed_params = list(),
-    lambda       = 1e0,
+    lambda       = ifelse(is.null(lambda), 1e0, lambda),
     param_scales = list(k = 1.0)
   )
 
-  if(!is.null(init_params)){
-    init_theta_physical <- init_params
-  }else {
-    init_theta_physical <- c(k = 2.0)
-  }
+  init_theta_physical <- if (!is.null(init_params)) init_params else c(k = 2.0)
 
   result <- cascading$optimize_parameters(
     init_theta_physical = init_theta_physical,
@@ -94,13 +91,14 @@ run_decay_example <- function(init_params = NULL) {
     theme_minimal()
 
   grid.arrange(p_state, p_forcing, ncol = 1)
+  plot_param_trace(cascading, true_params = list(k = k_true))
   return(result)
 }
 
 
-# EXAMPLE 2: Lotka-Volterra ─ estimate alpha and gamma ----
-run_lotka_volterra_example <- function() {
-  cat("\n=== Example 2: Lotka-Volterra — Estimating alpha and gamma ===\n")
+# EXAMPLE 2: Lotka-Volterra -- estimate alpha and gamma ----
+run_lotka_volterra_example <- function(init_params = NULL, lambda = NULL) {
+  cat("\n=== Example 2: Lotka-Volterra - Estimating alpha and gamma ===\n")
 
   lotka_volterra <- function(y, t, p) {
     c(p$alpha * y[1] - p$beta  * y[1] * y[2],
@@ -130,15 +128,17 @@ run_lotka_volterra_example <- function() {
     obs_times    = times_obs,
     obs_values   = obs_data,
     fixed_params = fixed_params,
-    lambda       = 1e2,
+    lambda       = ifelse(is.null(lambda), 1e1, lambda),
     param_scales = param_scales
   )
 
+  init_theta_physical <- if (!is.null(init_params)) init_params else c(alpha = 0.8, gamma = 0.6)
+
   result <- cascading$optimize_parameters(
-    init_theta_physical = c(alpha = 0.8, gamma = 0.6),
+    init_theta_physical = init_theta_physical,
     param_names         = c("alpha", "gamma"),
     lower_phys          = c(alpha = 0.1, gamma = 0.05),
-    upper_phys          = c(alpha = 3.0, gamma = 2.0)
+    upper_phys          = c(alpha = 10, gamma = 10)
   )
 
   cat(sprintf("\n  True:  alpha=%.2f, gamma=%.2f\n", p_true$alpha, p_true$gamma))
@@ -155,7 +155,7 @@ run_lotka_volterra_example <- function() {
     geom_line(data = df_sim, aes(x = Time, y = Prey),
               color = "forestgreen", linewidth = 1) +
     labs(
-      title = sprintf("Prey  (alpha: %.2f → %.3f)", p_true$alpha, result["alpha"]),
+      title = sprintf("Prey  (alpha: %.2f -> %.3f)", p_true$alpha, result["alpha"]),
       y = "Population"
     ) +
     theme_minimal()
@@ -166,7 +166,7 @@ run_lotka_volterra_example <- function() {
     geom_line(data = df_sim, aes(x = Time, y = Pred),
               color = "firebrick", linewidth = 1) +
     labs(
-      title = sprintf("Predator  (gamma: %.2f → %.3f)", p_true$gamma, result["gamma"]),
+      title = sprintf("Predator  (gamma: %.2f -> %.3f)", p_true$gamma, result["gamma"]),
       y = "Population"
     ) +
     theme_minimal()
@@ -183,13 +183,15 @@ run_lotka_volterra_example <- function() {
     theme_minimal()
 
   grid.arrange(p1, p2, p3, ncol = 1)
+  plot_param_trace(cascading,
+                   true_params = list(alpha = p_true$alpha, gamma = p_true$gamma))
   return(result)
 }
 
 
-# EXAMPLE 3: Sestak-Berggren ─ estimate E, n, m ----
-run_sb_example <- function() {
-  cat("\n=== Example 3: Sestak-Berggren — Estimating E, n, m ===\n")
+# EXAMPLE 3: Sestak-Berggren -- estimate E, n, m ----
+run_sb_example <- function(init_params = c(E = 50000, n = 3.0, m = 0.5), lambda = 1e1) {
+  cat("\n=== Example 3: Sestak-Berggren - Estimating E, n, m ===\n")
 
   sb_rhs <- function(x_vec, t, p) {
     eps    <- 1e-6
@@ -226,12 +228,12 @@ run_sb_example <- function() {
     obs_times    = times_obs,
     obs_values   = obs_data,
     fixed_params = fixed_params,
-    lambda       = 1e0,
+    lambda       = lambda,
     param_scales = param_scales
   )
 
   result <- cascading$optimize_parameters(
-    init_theta_physical = c(E = 50000, n = 3.0, m = 0.5),
+    init_theta_physical = init_params,
     param_names         = c("E", "n", "m"),
     lower_phys          = c(E = 10000, n = 0.1, m = 0.1),
     upper_phys          = c(E = 300000, n = 20,  m = 20)
@@ -283,11 +285,13 @@ run_sb_example <- function() {
     theme_minimal()
 
   grid.arrange(p_fit, p_u, ncol = 1)
+  plot_param_trace(cascading,
+                   true_params = list(E = p_true$E, n = p_true$n, m = p_true$m))
   return(result)
 }
 
 
-# ─── Run all examples ────────────────────────────────────────────────────────
+# --- Run all examples --------------------------------------------------------
 # source("examples/param-cascading/ode_params_examples.R")
 # run_decay_example()
 # run_lotka_volterra_example()
