@@ -93,8 +93,7 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
       np <- length(theta_norm)
       eps <- 1e-7
       
-      # --- Step A: Construct the Linearized Optimality Matrix (A) ---
-      # This matrix represents d/dy (Grad_y J_inner)
+      # --- Step A: Construct the d^2 J/dy^2 
       # It consists of the Data Misfit part and the Physics part.
       A <- matrix(0, NT, NT)
       
@@ -123,8 +122,7 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
       }      
       diag(A) + .Machine$double.eps * max(abs(diag(A))) # thikonov regularization for stability
 
-      # --- Step B: Construct the Parametric Forcing (B) ---
-      # This represents d/dtheta (Grad_y J_inner)
+      # --- Step B: Construct d^2/dtheta dy  J_inner
       B <- matrix(0, NT, np)
       
       for(j in 1:np) {
@@ -152,7 +150,7 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
       }
       
       # --- Step C: Solve for the Sensitivity S ---
-      # Solve the linearized optimality system: A * S = -B
+      # Solve optimality system differentiated w.r.t. theta: A * S = -B
       S <- solve(A, -B)
       
       # --- Step D: Total Outer Gradient ---

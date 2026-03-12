@@ -58,7 +58,7 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
     },
     
     # Forward Solver (Explicit Euler with Variable dt)
-    # -> dy/dt = f(t,y)  with non-linear 
+    # -> dy/dt = f(t,y)  with non-linear f
     solve_state = function(u_mat, y0) {
       y_new <- matrix(0, self$n_steps, self$n_vars)
       y_new[1, ] <- y0
@@ -78,8 +78,8 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
     solve_adjoint = function(y_curr) {
       p_new <- matrix(0, self$n_steps, self$n_vars)
 
-      # Bug 1 fix: seed the boundary with the residual at the last time step.
-      # The correct terminal condition is p[T] = (2/n_steps) * r[T], not 0.
+      # terminal condition is p[T] = (2/n_steps) * r[T]
+      # if r[T] = 0, then the terminal conditional is 0
       resid_T <- y_curr[self$n_steps, ] - self$observations_mapped[self$n_steps, ]
       resid_T[is.na(resid_T)] <- 0
       p_new[self$n_steps, ] <- (2 / self$n_steps) * resid_T
@@ -122,10 +122,7 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
       y_sim <- self$solve_state(u_mat, y0)
       p_sim <- self$solve_adjoint(y_sim)
       
-      # Bug 2 fix: dJ/du[t] = 2*lambda*u[t] + dt[t] * p[t+1].
-      # u[t] first affects y[t+1], so the adjoint contribution comes from
-      # p[t+1], not p[t].  Shift p_sim one row forward; last row stays 0
-      # because u[T] never enters the state equation.
+      # dJ/du[t] = 2*lambda*u[t] + dt[t] * p[t+1]
       p_shifted <- rbind(p_sim[-1, , drop = FALSE],
                          matrix(0, 1, self$n_vars))
       dt_col <- matrix(self$dt_vec, nrow = self$n_steps, ncol = self$n_vars)
@@ -144,9 +141,7 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
         u_init <- rep(0, self$n_steps * self$n_vars)
       }
       
-      # If y0 is not provided (scalar NA), initialise from the first observation row.
-      # Bug 6 fix: the old code assigned a scalar mean, giving y0 of length 1
-      # regardless of n_vars — correct initialisation requires a length-n_vars vector.
+      # If y0 is not provided (scalar NA), initialise from the first observation row
       if (length(y0) == 1 && is.na(y0)) {
         first_row <- which(!is.na(self$observations_mapped[, 1]))[1]
         y0 <- self$observations_mapped[first_row, ]

@@ -24,7 +24,7 @@ euler_solve <- function(y0, times, func, params) {
 run_decay_example <- function(init_params = NULL, lambda = NULL) {
   cat("\n=== Example 1: Exponential Decay - Estimating k ===\n")
 
-  decay_rhs <- function(y, t, p) -p$k * y
+  decay_rhs <- function(y, t, p) -p$k * y^3
 
   k_true  <- 0.5
   y0_true <- c(5.0)

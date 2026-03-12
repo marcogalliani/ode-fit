@@ -333,9 +333,10 @@ run_discovery_test <- function(lambda = 0.01) {
   cat("\n=== Running Discovery Test (Missing Physics) ===\n")
 
   # 1. Physics: Simple Linear System
+  k <- 6e-2
   # Solver thinks the physics is just dy/dt = -0.5 * y^2
   simple_rhs <- function(y, t, p) {
-    return(-0.5 * y^3)
+    return(-k * y^3)
   }
 
   times_sim <- seq(0.01, 10, by = 0.01)
@@ -344,10 +345,11 @@ run_discovery_test <- function(lambda = 0.01) {
   # 2. Generate Truth with an "Unknown" External Force
   # Truth: dy/dt = -0.5*y^2 + sin(t)  <-- Solver doesn't know about sin(t)
   y_true <- numeric(n_steps)
-  y_true[1] <- 5
+  y_true[1] <- 10
+
   for (i in 1:(n_steps - 1)) {
     dt <- 0.1
-    dy <- -0.5 * y_true[i]^3 + sin(times_sim[i]) # The hidden force
+    dy <- -k * y_true[i]^(1/3) + 0.2*sin(times_sim[i]) # The hidden force
     y_true[i + 1] <- y_true[i] + dt * dy
   }
 
