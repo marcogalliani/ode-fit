@@ -36,10 +36,10 @@ run_surface_comparison <- function() {
   obs_data <- obs_data + matrix(rnorm(length(obs_data), 0, 1),
                                 nrow(obs_data), 2)
 
-  # 2. Initialize one GeneralOdeSolver (params updated in-place per grid point)
+  # 2. Initialize one OdeSystemSolver (params updated in-place per grid point)
   # Lambda is the same for naive and outer; it controls how much u(t) can deviate
   # from zero in the outer surface.
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs  = lotka_volterra,
     obs_times = times_obs,
     times_sim = times_sim,

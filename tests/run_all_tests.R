@@ -24,8 +24,8 @@ if (interactive() && requireNamespace("rstudioapi", quietly = TRUE) &&
 source("tests/test_helpers.R")
 .test_env$results <- list()
 
-# ---- Suite 1: GeneralOdeSolver ----
-cat("\n### GeneralOdeSolver ###\n")
+# ---- Suite 1: OdeSystemSolver ----
+cat("\n### OdeSystemSolver ###\n")
 local({
   source("tests/test_general_ode_solver.R", local = TRUE)
 })

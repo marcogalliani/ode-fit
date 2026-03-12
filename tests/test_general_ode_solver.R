@@ -1,7 +1,7 @@
 # =============================================================================
 # tests/test_general_ode_solver.R
 #
-# Test suite for GeneralOdeSolver (src/solvers/general_ode_system_solver.R).
+# Test suite for OdeSystemSolver (src/solvers/general_ode_system_solver.R).
 #
 # HOW TO RUN (from repo root):
 #   source("tests/test_general_ode_solver.R")
@@ -61,7 +61,7 @@ describe("T1: Gradient consistency — 1-D exponential decay", {
   y0        <- 5.0
   y_true    <- matrix(y0 * exp(-params$k * times_sim), ncol = 1)
 
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs  = decay_rhs,
     times_sim = times_sim,
     obs_times = times_sim,
@@ -107,7 +107,7 @@ describe("T2: Zero-forcing baseline — finite values and self-consistency", {
   y0        <- 2.0
   y_obs     <- matrix(y0 * exp(-params$k * times_sim), ncol = 1)
 
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs   = decay_rhs,
     times_sim  = times_sim,
     obs_times  = times_sim,
@@ -153,7 +153,7 @@ describe("T3: Cost monotonicity — optimize() reduces the cost", {
   set.seed(2)
   obs_data <- y_true + matrix(rnorm(length(y_true), 0, 0.1), nrow(y_true), 1)
 
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs   = decay_rhs,
     times_sim  = times_sim,
     obs_times  = obs_times,
@@ -195,7 +195,7 @@ describe("T4: State recovery — u* ≈ 0 when physics and obs are perfect", {
   # Ground truth generated with the SAME Euler integrator the solver uses
   y_true <- euler_solve(decay_rhs, y0, times_sim, params)
 
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs   = decay_rhs,
     times_sim  = times_sim,
     obs_times  = times_sim,
@@ -241,7 +241,7 @@ describe("T5: Forcing recovery — u*(t) correlates with true sin(t) forcing", {
   set.seed(5)
   obs_data <- y_true + matrix(rnorm(length(y_true), 0, 0.05), nrow(y_true), 1)
 
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs   = decay_rhs_no_forcing,   # model does NOT know about sin(t)
     times_sim  = times_sim,
     obs_times  = times_sim,
@@ -280,7 +280,7 @@ describe("T6: NA handling — observations with missing values", {
   gap_idx <- which(obs_times >= 1.5 & obs_times <= 2.5)
   y_obs[gap_idx, ] <- NA
 
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs   = decay_rhs,
     times_sim  = times_sim,
     obs_times  = obs_times,
@@ -326,7 +326,7 @@ describe("T7: Gradient consistency — 2-D Lotka-Volterra", {
   set.seed(8)
   obs_data <- y_true + matrix(rnorm(length(y_true), 0, 0.5), nrow(y_true), 2)
 
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs   = lv_rhs,
     times_sim  = times_sim,
     obs_times  = times_sim,

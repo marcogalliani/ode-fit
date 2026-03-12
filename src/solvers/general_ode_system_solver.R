@@ -7,7 +7,7 @@ library(gridExtra)
 
 
 ## General Physics-Informed Smoother----
-GeneralOdeSolver <- R6Class("GeneralOdeSolver",
+OdeSystemSolver <- R6Class("OdeSystemSolver",
   public = list(
     func_rhs = NULL, params = NULL, lambda = NULL,
     times_sim = NULL,      # Simulation Time Grid

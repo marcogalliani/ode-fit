@@ -4,7 +4,7 @@ library(reshape2)
 
 source("src/solvers/parameter_cascading.R")
 
-# --- Shared utility: forward Euler integrator (consistent with GeneralOdeSolver) ---
+# --- Shared utility: forward Euler integrator (consistent with OdeSystemSolver) ---
 euler_solve <- function(y0, times, func, params) {
   n      <- length(times)
   n_vars <- length(y0)

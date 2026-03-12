@@ -6,7 +6,7 @@ library(plotly)
 # Utilities----
 
 ## enable debugging for solver methods----
-# GeneralOdeSolver$debug("gradient_function")
+# OdeSystemSolver$debug("gradient_function")
 
 # EXAMPLE 1: Lotka-Volterra (Predator-Prey)----
 run_user_example <- function() {
@@ -55,7 +55,7 @@ run_user_example <- function() {
   obs_data <- y_true + matrix(rnorm(length(y_true), 0, 1.5), nrow(y_true), 2)
 
   # 3. Run Solver
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs = lotka_volterra,
     obs_times = times_obs,
     times_sim = times_sim,
@@ -193,7 +193,7 @@ run_sb_parallel_test <- function() {
   obs_data <- y_true_obs + matrix(rnorm(length(y_true_obs), 0, 0.2), nrow(y_true_obs), L)
 
   # Optimisation
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs = sb_parallel_rhs,
     times_sim = times_sim, # The solver runs on this grid
     obs_times = times_obs, # Data exists at these times
@@ -286,7 +286,7 @@ run_missing_data_test <- function() {
   cat("Introduced", sum(is.na(obs_data)), "NAs into the dataset.\n")
 
   # 4. Run Optimization
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs = lotka_volterra,
     times_sim = times_sim,
     obs_times = times_obs,
@@ -354,7 +354,7 @@ run_discovery_test <- function(lambda = 0.01) {
   obs_data <- matrix(y_true + rnorm(n_steps, 0, 0.3), ncol = 1)
 
   # 3. Solver
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs = simple_rhs,
     times_sim = times_sim,
     obs_times = times_sim,
@@ -424,7 +424,7 @@ run_discovery_test <- function(lambda = 0.01) {
 
 # EXAMPLE 5: opt surface----
 run_sse_surface_test <- function() {
-  cat("\n=== Generating SSE Surface using GeneralOdeSolver ===\n")
+  cat("\n=== Generating SSE Surface using OdeSystemSolver ===\n")
 
   # 1. Setup Common Physics & Data (Same as your example)
   lotka_volterra <- function(y, t, p) {
@@ -457,7 +457,7 @@ run_sse_surface_test <- function() {
   obs_data <- obs_data + matrix(rnorm(length(obs_data), 0, 1.5), nrow(obs_data), 2)
 
   # 2. Initialize Solver Once
-  solver <- GeneralOdeSolver$new(
+  solver <- OdeSystemSolver$new(
     func_rhs = lotka_volterra,
     obs_times = times_obs,
     times_sim = times_sim,
@@ -502,7 +502,7 @@ run_sse_surface_test <- function() {
     geom_contour_filled(bins = 15) +
     annotate("point", x = 1.1, y = 0.4, color = "red", size = 3, shape = 4) + # Truth
     labs(
-      title = "SSE Landscape (Using GeneralOdeSolver)",
+      title = "SSE Landscape (Using OdeSystemSolver)",
       subtitle = "Red X = True Parameters",
       fill = "Cost"
     ) +

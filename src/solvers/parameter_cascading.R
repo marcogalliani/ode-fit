@@ -23,7 +23,7 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
       self$obs_values <- obs_values
       self$fixed_params <- fixed_params
       self$lambda <- lambda
-      self$inner_solver_class <- GeneralOdeSolver
+      self$inner_solver_class <- OdeSystemSolver
       self$param_scales <- param_scales
     },
     
