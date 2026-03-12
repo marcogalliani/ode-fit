@@ -1,0 +1,14 @@
+.DS_Store
+
+# images
+*.pdf
+images/
+
+# internal docs
+docs/
+
+# R files
+.Rhistory
+ode-fit.Rproj
+.Rproj.user/
+
