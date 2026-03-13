@@ -8,8 +8,11 @@
 #
 # WHAT IS TESTED:
 #   C1. Outer gradient consistency -- outer_gradient vs numerical differences
-#       of outer_objective.  Depends on correct inner adjoint (Bugs 1 & 2).
-#       Expected to FAIL before fixes, PASS afterwards.
+#       of outer_objective over TWO coupled parameters (alpha, gamma in LV).
+#       A single-parameter cosine check is trivially ±1; two parameters make
+#       the direction test meaningful.  Sign agreement per component is the
+#       tightest magnitude check justified given inner-solver inexactness.
+#       Depends on correct inner adjoint (Bugs 1 & 2).
 #   C2. Descent direction -- at the true parameters outer_gradient ≈ 0 and
 #       moving in the negative-gradient direction lowers the outer objective.
 #   C3. Parameter recovery (1-D decay) -- CascadingOdeSolver recovers the
@@ -46,70 +49,96 @@ euler_solve <- function(rhs, y0, times, params) {
 
 # ---------------------------------------------------------------------------
 # C1. Outer gradient consistency: outer_gradient vs central finite differences
-#     of outer_objective.
+#     of outer_objective — TWO free parameters on Lotka-Volterra.
 #
-#     Note: the outer objective calls the inner solver (stochastic u_init),
-#     so the finite-difference magnitude estimate is noisy — gradient magnitudes
-#     cannot be compared reliably this way.  We therefore check only the
-#     gradient *direction* (cosine similarity), which must be > 0.98.
-#     A wrong adjoint (Bugs 1 & 2 unfixed) would give cos_sim << 1.
+#     System: Lotka-Volterra; alpha and gamma are estimated, beta and delta fixed.
+#     The two parameters couple through the predator-prey interaction, so the
+#     gradient components are not independent — this is a stronger test than
+#     decoupled systems.
+#
+#     With a single parameter, cosine similarity collapses to a sign check
+#     (cos = ±1 trivially).  Two parameters in genuinely different directions
+#     make the angular comparison meaningful: a wrong adjoint would rotate the
+#     gradient vector away from the FD direction.
+#
+#     Magnitude equality is NOT checked.  The analytic gradient is exact at the
+#     inner optimum u*(θ); the FD gradient re-solves the inner problem at θ±ε,
+#     reaching a different (warm-started) u*.  The two can differ in magnitude
+#     by O(inner tolerance) — checking equality would test inner-solver
+#     convergence, not adjoint correctness.  Sign agreement per component is
+#     the tightest magnitude-related check that is theoretically justified.
 # ---------------------------------------------------------------------------
-describe("C1: Outer gradient consistency — 1-D exponential decay", {
+describe("C1: Outer gradient consistency — Lotka-Volterra (alpha, gamma)", {
 
-  true_k    <- 0.5
-  times_sim <- seq(0, 3, by = 0.2)
-  obs_times <- seq(0, 3, by = 0.5)
-  y0_true   <- 4.0
+  p_true    <- list(alpha = 1.1, beta = 0.4, delta = 0.1, gamma = 0.4)
+  y0_true   <- c(10, 10)
+  times_sim <- seq(0, 5, by = 0.1)
+  obs_times <- seq(0, 5, by = 0.5)
 
-  y_true  <- euler_solve(decay_rhs, y0_true, obs_times, list(k = true_k))
+  y_true <- euler_solve(lv_rhs, y0_true, obs_times, p_true)
   set.seed(10)
-  obs_data <- y_true + matrix(rnorm(length(y_true), 0, 0.05), nrow(y_true), 1)
+  obs_data <- y_true + matrix(rnorm(length(y_true), 0, 0.3),
+                              nrow(y_true), ncol(y_true))
 
-  fixed_params  <- list(y0 = y0_true)        # k is free, nothing is truly fixed
-  param_scales  <- list(k = 0.5)             # scale ~ order of magnitude of k
+  fixed_params <- list()
+  param_scales <- list(alpha = 1.0, beta = 1.0, delta = 1.0, gamma = 1.0)
+  param_names  <- c("alpha", "beta", "delta", "gamma")
 
   cascading <- CascadingOdeSolver$new(
-    func_rhs     = decay_rhs,
+    func_rhs     = lv_rhs,
     times_sim    = times_sim,
     obs_times    = obs_times,
     obs_values   = obs_data,
-    fixed_params = list(),                   # no fixed structural params
-    lambda       = 0.5,
+    fixed_params = fixed_params,
+    lambda       = 1.0,
     param_scales = param_scales
   )
 
-  # Evaluate at a slightly perturbed (normalised) parameter
-  theta_test <- c(k = true_k / param_scales$k * 1.1)   # 10% above truth
+  # Test point: alpha +10%, gamma -15% — components push in 
+  theta_test <- c(
+    alpha = p_true$alpha / param_scales$alpha * 1.10,
+    beta = p_true$beta / param_scales$beta * 0.2,
+    delta = p_true$delta / param_scales$delta * 1.3,
+    gamma = p_true$gamma / param_scales$gamma * 0.85)
 
-  # Warm-up: run objective once to populate cache
+  # Warm-up: populate the inner-solver cache at theta_test
   set.seed(11)
-  cascading$outer_objective(theta_test, "k")
+  cascading$outer_objective(theta_test, param_names)
 
-  # Analytic outer gradient (uses cache)
-  g_analytic <- cascading$outer_gradient(theta_test, "k")
+  # Analytic outer gradient (implicit differentiation via cached inner solve)
+  g_analytic <- cascading$outer_gradient(theta_test, param_names)
 
-  # Numerical gradient of outer_objective (central differences)
-  # Each call to outer_objective re-runs the inner solver; we fix seeds.
-  eps <- 1e-3
+  # Numerical gradient via central finite differences
+  eps <- 1e-8
   g_numerical <- numeric(length(theta_test))
   for (j in seq_along(theta_test)) {
     th_p <- theta_test; th_p[j] <- theta_test[j] + eps
     th_m <- theta_test; th_m[j] <- theta_test[j] - eps
-    set.seed(11); f_p <- cascading$outer_objective(th_p, "k")
-    set.seed(11); f_m <- cascading$outer_objective(th_m, "k")
+    set.seed(11); f_p <- cascading$outer_objective(th_p, param_names)
+    set.seed(11); f_m <- cascading$outer_objective(th_m, param_names)
     g_numerical[j] <- (f_p - f_m) / (2 * eps)
   }
 
-  rel_err <- abs(g_analytic - g_numerical) / (abs(g_numerical) + 1e-10)
   cos_sim <- sum(g_analytic * g_numerical) /
              (sqrt(sum(g_analytic^2)) * sqrt(sum(g_numerical^2)) + 1e-16)
 
-  # Magnitude comparison is unreliable with stochastic inner optimisation;
-  # direction (cosine similarity) is the meaningful quantity to verify.
-  test_that("outer gradient cosine similarity > 0.98", {
+  fmt_vec <- function(x) paste(sprintf("%+.3e", x), collapse = ", ")
+
+  # Direction check
+  test_that("outer gradient direction (cosine similarity) > 0.98", {
     expect_greater_than(
       cos_sim, 0.98,
-      sprintf("cosine sim = %.4f (rel mag error = %.4e)", cos_sim, max(rel_err))
+      sprintf("cosine sim = %.4f  |  analytic=(%s)  numerical=(%s)",
+              cos_sim, fmt_vec(g_analytic), fmt_vec(g_numerical))
+    )
+  })
+
+  # Sign check: each component must agree in sign
+  test_that("each gradient component has the correct sign", {
+    expect_true(
+      all(sign(g_analytic) == sign(g_numerical)),
+      sprintf("sign mismatch — analytic=(%s)  numerical=(%s)",
+              fmt_vec(g_analytic), fmt_vec(g_numerical))
     )
   })
 })

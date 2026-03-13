@@ -131,7 +131,6 @@ run_user_example <- function() {
   )
 }
 
-
 # EXAMPLE 2: Sestak-Berggren model----
 run_sb_parallel_test <- function() {
   cat("\n=== Running Sestak-Berggren Parallel Test ===\n")
@@ -422,7 +421,6 @@ run_discovery_test <- function(lambda = 0.01) {
 
   generate_optimization_gif(solver, trace_results, y0 = y_true[1])
 }
-
 
 # EXAMPLE 5: opt surface----
 run_sse_surface_test <- function() {
