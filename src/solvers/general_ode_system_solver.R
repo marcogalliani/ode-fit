@@ -5,6 +5,8 @@ library(tidyr)
 library(reshape2)
 library(gridExtra)
 
+source("src/solvers/bvp_solver.R")
+
 
 ## General Physics-Informed Smoother----
 OdeSystemSolver <- R6Class("OdeSystemSolver",
@@ -110,7 +112,10 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
     cost_function = function(u_flat, y0) {
       u_mat <- matrix(u_flat, self$n_steps, self$n_vars)
       y_sim <- self$solve_state(u_mat, y0)
-      
+
+      # Guard: forward Euler can blow up at extreme parameters
+      if (!all(is.finite(y_sim))) return(1e20)
+
       # SSE only on non-NA slots
       sse <- sum((self$observations_mapped - y_sim)^2, na.rm = TRUE)
       reg <- self$lambda * sum(u_mat^2)
@@ -119,19 +124,74 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
     
     gradient_function = function(u_flat, y0) {
       u_mat <- matrix(u_flat, self$n_steps, self$n_vars)
+
+      # Forward pass: get the state trajectory for the current u.
       y_sim <- self$solve_state(u_mat, y0)
-      p_sim <- self$solve_adjoint(y_sim)
-      
-      # dJ/du[t] = 2*lambda*u[t] + dt[t] * p[t+1]
-      p_shifted <- rbind(p_sim[-1, , drop = FALSE],
-                         matrix(0, 1, self$n_vars))
-      dt_col <- matrix(self$dt_vec, nrow = self$n_steps, ncol = self$n_vars)
-      grad <- 2 * self$lambda * u_mat + p_shifted * dt_col
-      
+
+      # Guard: ODE blew up — return regularisation gradient (pushes u → 0)
+      if (!all(is.finite(y_sim))) return(2 * self$lambda * u_flat)
+
+      # Build the linear BVP that jointly represents
+      #   Forward:  y[t+1] = A[t]*y[t] + b[t]              (C = 0: u is fixed)
+      #   Backward: p[t]   = D[t]*p[t+1] + E[t]*y[t]
+      # and solve it with solve_linear_bvp_riccati to obtain (Y = y, P = adjoint).
+      # With C = 0 the Riccati matrix R[t] = 0 throughout, so the forward sweep
+      # reproduces y_sim exactly and the backward substitution gives the adjoint.
+      ns <- self$n_steps; nv <- self$n_vars
+
+      obs_mask  <- matrix(as.numeric(!is.na(self$observations_mapped)), ns, nv)
+      obs_clean <- self$observations_mapped; obs_clean[is.na(obs_clean)] <- 0
+
+      A_list <- vector("list", ns - 1L)
+      C_list <- vector("list", ns - 1L)
+      D_list <- vector("list", ns - 1L)
+      E_list <- vector("list", ns - 1L)
+      b_list <- vector("list", ns - 1L)
+      f_list <- vector("list", ns - 1L)
+
+      for (t in seq_len(ns - 1L)) {
+        dt <- self$dt_vec[t]
+        Jt <- self$get_jacobian(y_sim[t, ], self$times_sim[t])
+        At <- diag(nv) + dt * Jt
+
+        A_list[[t]] <- At
+        C_list[[t]] <- matrix(0, nv, nv)                        # no p→y coupling
+        D_list[[t]] <- diag(nv) + dt * t(Jt)
+        E_obs <- matrix(0, nv, nv)
+        diag(E_obs) <- (2 / ns) * obs_mask[t, ]
+        E_list[[t]] <- E_obs
+
+        # b[t] encodes the (nonlinear) forward step via residual:
+        #   b[t] = y[t+1] - A[t]*y[t]  so that A[t]*y[t] + b[t] = y[t+1]
+        b_list[[t]] <- matrix(y_sim[t + 1L, ] - At %*% y_sim[t, ], nv, 1)
+        # Backward forcing: -(2/ns)*mask[t]*obs_clean[t] so that
+        # E[t]*y[t] + f[t] = (2/ns)*mask[t]*(y[t] - obs_clean[t])
+        f_list[[t]] <- matrix(-(2 / ns) * obs_mask[t, ] * obs_clean[t, ], nv, 1)
+      }
+
+      E_T <- matrix(0, nv, nv)
+      diag(E_T) <- (2 / ns) * obs_mask[ns, ]
+      f_T <- matrix(-(2 / ns) * obs_mask[ns, ] * obs_clean[ns, ], nv, 1)
+
+      bvp <- solve_linear_bvp_riccati(
+        ns = ns, ny = nv, nrhs = 1L,
+        A_list = A_list, C_list = C_list, b_list = b_list,
+        D_list = D_list, E_list = E_list, f_list = f_list,
+        y0_mat = matrix(y0, nv, 1),
+        E_T    = E_T, f_T = f_T
+      )
+
+      p_sim <- matrix(bvp$P[, , 1L], ns, nv)
+
+      # dJ/du[t] = 2*lambda*u[t] + dt[t]*p[t+1]
+      p_shifted <- rbind(p_sim[-1, , drop = FALSE], matrix(0, 1, nv))
+      dt_col    <- matrix(self$dt_vec, nrow = ns, ncol = nv)
+      grad      <- 2 * self$lambda * u_mat + p_shifted * dt_col
+
       return(as.vector(grad))
     },
     
-    optimize = function(y0, max_iter = 100, u_init = NULL) {
+    optimize = function(y0, max_iter = 100, u_init = NULL, reltol = sqrt(.Machine$double.eps)) {
       # u_init: optional warm-start forcing (flat vector, length n_steps*n_vars).
       # Passing the previous optimal u avoids restarting from zero at each outer
       # iteration, which keeps the inner solver on the same local-minimum branch
@@ -155,8 +215,9 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
           }
         }
       }
-      res <- optim(par = u_init, fn = self$cost_function, gr = self$gradient_function, 
-                   y0 = y0, method = "BFGS", control = list(maxit = max_iter, trace = 1))
+      res <- optim(par = u_init, fn = self$cost_function, gr = self$gradient_function,
+                   y0 = y0, method = "BFGS",
+                   control = list(maxit = max_iter, reltol = reltol, trace = 1))
       
       self$u <- matrix(res$par, self$n_steps, self$n_vars)
       self$y <- self$solve_state(self$u, y0)

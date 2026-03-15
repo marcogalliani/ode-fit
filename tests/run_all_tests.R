@@ -36,6 +36,12 @@ local({
   source("tests/test_cascading_ode_solver.R", local = TRUE)
 })
 
+# ---- Suite 3: BVP Solver ----
+cat("\n### BVP Solver ###\n")
+local({
+  source("tests/test_bvp_solver.R", local = TRUE)
+})
+
 # ---- Combined summary ----
 cat("\n================================================================\n")
 test_summary()

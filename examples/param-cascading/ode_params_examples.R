@@ -45,6 +45,7 @@ run_decay_example <- function(init_params = NULL, lambda = NULL) {
     times_sim    = times_sim,
     obs_times    = times_obs,
     obs_values   = obs_data,
+    y0           = y0_true,
     fixed_params = list(),
     lambda       = ifelse(is.null(lambda), 1e0, lambda),
     param_scales = list(k = 1.0)
@@ -97,10 +98,13 @@ run_decay_example <- function(init_params = NULL, lambda = NULL) {
 
 
 # EXAMPLE 2: Lotka-Volterra -- estimate alpha and gamma ----
-run_lotka_volterra_example <- function(init_params = NULL, lambda = NULL) {
+run_lotka_volterra_example <- function(
+  init_params = c(alpha = 0.8, beta = 0.4, delta = 0.4, gamma = 0.6), lambda = 1e0) {
   cat("\n=== Example 2: Lotka-Volterra - Estimating alpha and gamma ===\n")
 
   lotka_volterra <- function(y, t, p) {
+
+
     c(p$alpha * y[1] - p$beta  * y[1] * y[2],
       p$delta * y[1] * y[2] - p$gamma * y[2])
   }
@@ -108,8 +112,8 @@ run_lotka_volterra_example <- function(init_params = NULL, lambda = NULL) {
   p_true  <- list(alpha = 1.1, beta = 0.4, delta = 0.1, gamma = 0.4)
   y0_true <- c(10, 10)
 
-  times_obs  <- seq(0, 30, by = 0.5)
-  times_fine <- seq(0, 30, by = 0.1)
+  times_obs  <- seq(0, 5, by = 0.5)
+  times_fine <- seq(0, 5, by = 0.1)
   times_sim  <- times_fine   # pass clean grid; solver will merge obs_times internally
 
   y_sim_fine <- euler_solve(y0_true, times_fine, lotka_volterra, p_true)
@@ -117,28 +121,26 @@ run_lotka_volterra_example <- function(init_params = NULL, lambda = NULL) {
   set.seed(123)
   obs_data <- y_sim_fine[obs_idx, ] +
     matrix(rnorm(length(obs_idx) * 2, 0, 0.8), length(obs_idx), 2)
-
-  # Fix beta and delta; estimate alpha and gamma
-  fixed_params <- list(beta = p_true$beta, delta = p_true$delta)
-  param_scales <- list(alpha = 1.0, gamma = 1.0)
+  
+  param_scales <- rep(1.0,length(p_true))
+  names(param_scales) <- names(p_true)
 
   cascading <- CascadingOdeSolver$new(
     func_rhs     = lotka_volterra,
     times_sim    = times_sim,
     obs_times    = times_obs,
     obs_values   = obs_data,
-    fixed_params = fixed_params,
-    lambda       = ifelse(is.null(lambda), 1e1, lambda),
+    y0           = y0_true,
+    fixed_params = list(),
+    lambda       = lambda,
     param_scales = param_scales
   )
 
-  init_theta_physical <- if (!is.null(init_params)) init_params else c(alpha = 0.8, gamma = 0.6)
-
   result <- cascading$optimize_parameters(
-    init_theta_physical = init_theta_physical,
-    param_names         = c("alpha", "gamma"),
-    lower_phys          = c(alpha = 0.1, gamma = 0.05),
-    upper_phys          = c(alpha = 10, gamma = 10)
+    init_theta_physical = init_params,
+    param_names = names(init_params),
+    lower_phys  = c(alpha = 0.1, beta = 0.1, delta = 0.1, gamma = 0.1),
+    upper_phys = c(alpha = 10, beta = 10, delta = 10, gamma = 10)
   )
 
   cat(sprintf("\n  True:  alpha=%.2f, gamma=%.2f\n", p_true$alpha, p_true$gamma))
@@ -190,7 +192,7 @@ run_lotka_volterra_example <- function(init_params = NULL, lambda = NULL) {
 
 
 # EXAMPLE 3: Sestak-Berggren -- estimate E, n, m ----
-run_sb_example <- function(init_params = c(E = 50000, n = 3.0, m = 0.5), lambda = 1e1) {
+run_sb_example <- function(init_params = c(A = 1e6, E = 50000, n = 3.0, m = 0.5), lambda = 1e1) {
   cat("\n=== Example 3: Sestak-Berggren - Estimating E, n, m ===\n")
 
   sb_rhs <- function(x_vec, t, p) {
@@ -218,15 +220,16 @@ run_sb_example <- function(init_params = c(E = 50000, n = 3.0, m = 0.5), lambda 
            length(obs_idx), length(T_vec))
 
   # Fix A, C0, R, T_vec; estimate E, n, m
-  fixed_params <- list(A = p_true$A, C0 = p_true$C0,
+  fixed_params <- list(C0 = p_true$C0,
                        R = p_true$R, T_vec = T_vec)
-  param_scales <- list(E = 10000, n = 1, m = 1)
+  param_scales <- list(A = 1e5, E = 10000, n = 1, m = 1)
 
   cascading <- CascadingOdeSolver$new(
     func_rhs     = sb_rhs,
     times_sim    = times_sim,
     obs_times    = times_obs,
     obs_values   = obs_data,
+    y0           = y0_true,
     fixed_params = fixed_params,
     lambda       = lambda,
     param_scales = param_scales
@@ -234,13 +237,13 @@ run_sb_example <- function(init_params = c(E = 50000, n = 3.0, m = 0.5), lambda 
 
   result <- cascading$optimize_parameters(
     init_theta_physical = init_params,
-    param_names         = c("E", "n", "m"),
-    lower_phys          = c(E = 10000, n = 0.1, m = 0.1),
-    upper_phys          = c(E = 300000, n = 20,  m = 20)
+    param_names         = c("A", "E", "n", "m"),
+    lower_phys          = c(A = 1e4, E = 10000, n = 0.1, m = 0.1),
+    upper_phys          = c(A = 1e8, E = 300000, n = 20,  m = 20)
   )
 
-  cat(sprintf("\n  True:  E=%.0f,  n=%.1f,  m=%.2f\n", p_true$E, p_true$n, p_true$m))
-  cat(sprintf("  Est:   E=%.0f, n=%.3f, m=%.3f\n", result["E"], result["n"], result["m"]))
+  cat(sprintf("\n  True:  A=%.0f, E=%.0f,  n=%.1f,  m=%.2f\n", p_true$A, p_true$E, p_true$n, p_true$m))
+  cat(sprintf("  Est:   A=%.0f, E=%.0f, n=%.3f, m=%.3f\n", result["A"], result["E"], result["n"], result["m"]))
 
   s           <- cascading$last_solver
   temp_labels <- paste0("T=", T_vec, "K")

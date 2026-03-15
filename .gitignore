@@ -4,6 +4,7 @@
 *.pdf
 images/
 *.gif
+*.png
 
 # internal docs
 docs/
@@ -12,4 +13,7 @@ docs/
 .Rhistory
 ode-fit.Rproj
 .Rproj.user/
+
+# vscode
+.vscode
 
