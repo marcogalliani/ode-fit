@@ -36,10 +36,22 @@ local({
   source("tests/test_cascading_ode_solver.R", local = TRUE)
 })
 
-# ---- Suite 3: BVP Solver ----
-cat("\n### BVP Solver ###\n")
+# ---- Suite 3: TrackingOdeSolver ----
+cat("\n### TrackingOdeSolver ###\n")
+local({
+  source("tests/test_tracking_ode_solver.R", local = TRUE)
+})
+
+# ---- Suite 4: BVP Solver (linear Riccati) ----
+cat("\n### BVP Solver (Riccati) ###\n")
 local({
   source("tests/test_bvp_solver.R", local = TRUE)
+})
+
+# ---- Suite 5: BVP Collocation solver ----
+cat("\n### BVP Collocation + optimize_bvp ###\n")
+local({
+  source("tests/test_bvp_colloc.R", local = TRUE)
 })
 
 # ---- Combined summary ----

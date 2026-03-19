@@ -6,208 +6,223 @@ library(reshape2)
 library(gridExtra)
 
 source("src/solvers/bvp_solver.R")
+source("src/solvers/ode_solvers.R")
 
 
-## General Physics-Informed Smoother----
+# =============================================================================
+# OdeSystemSolver
+#
+# Physics-informed smoother estimating unknown additive forcing u(t).
+#
+# Inner problem:
+#   min_u  (1/ns)·SSE(y)  +  λ · ∫u² dt
+#   s.t.   dy/dt = f(y, t, θ) + u(t),   y(t₁) = y₀
+#
+# `method` selects the integrator: "cn", "gl1", or "gl2".
+# =============================================================================
 OdeSystemSolver <- R6Class("OdeSystemSolver",
+
+  private = list(
+    cache_u            = NULL,
+    cache_y            = NULL,
+    cache_p            = NULL,
+    cache_grad_contrib = NULL,
+
+    # Builds the source_fn used by adjoint integrators:
+    #   source_fn(t_idx) = (2/ns) * (y[t] - obs[t]),  NA obs -> 0
+    make_source_fn = function(y_curr) {
+      ns  <- self$n_steps
+      obs <- self$observations_mapped
+      function(t_idx) {
+        r <- y_curr[t_idx, ] - obs[t_idx, ]
+        r[is.na(r)] <- 0
+        (2 / ns) * r
+      }
+    }
+  ),
+
   public = list(
     func_rhs = NULL, params = NULL, lambda = NULL,
-    times_sim = NULL,      # Simulation Time Grid
-    n_steps = NULL, 
-    dt_vec = NULL,         # Vector of time steps (can be variable)
-    n_vars = NULL,
-    
-    observations_mapped = NULL, # Matrix matching times_sim (mostly NAs)
-    
+    times_sim = NULL, n_steps = NULL, dt_vec = NULL, n_vars = NULL,
+    method = NULL,
+
+    observations_mapped = NULL,
     y = NULL, u = NULL, p = NULL,
-    
-    # Initialize: Maps sparse data to the fine grid
-    initialize = function(func_rhs, times_sim, obs_times, obs_values, params, lambda) {
+
+    initialize = function(func_rhs, times_sim, obs_times, obs_values, params, lambda,
+                          method = "gl2") {
       self$func_rhs <- func_rhs
-      
       obs_times  <- round(obs_times,  digits = 10)
       times_sim  <- sort(unique(round(c(times_sim, obs_times), digits = 10)))
       self$times_sim <- times_sim
-      self$params <- params
-      self$lambda <- lambda
-      self$n_steps <- length(times_sim)
-      self$n_vars <- ncol(obs_values)
-
-      self$dt_vec <- c(diff(times_sim), 0)
+      self$params    <- params
+      self$lambda    <- lambda
+      self$n_steps   <- length(times_sim)
+      self$n_vars    <- ncol(obs_values)
+      self$dt_vec    <- c(diff(times_sim), 0)
+      self$method    <- method
 
       self$observations_mapped <- matrix(NA, nrow = self$n_steps, ncol = self$n_vars)
       self$observations_mapped[times_sim %in% obs_times, ] <- obs_values
-      # Initialize State Matrices
       self$y <- matrix(0, self$n_steps, self$n_vars)
       self$u <- matrix(0, self$n_steps, self$n_vars)
       self$p <- matrix(0, self$n_steps, self$n_vars)
     },
-    
-    # Numerical Jacobian (Central Difference)
+
     get_jacobian = function(y_vec, t_val) {
-      n <- length(y_vec)
-      J <- matrix(0, n, n)
+      n   <- length(y_vec)
+      J   <- matrix(0, n, n)
       eps <- 1e-7
-      f0 <- self$func_rhs(y_vec, t_val, self$params)
-      for (j in 1:n) {
+      for (j in seq_len(n)) {
         y_p <- y_vec; y_p[j] <- y_p[j] + eps
         y_m <- y_vec; y_m[j] <- y_m[j] - eps
-        f_p <- self$func_rhs(y_p, t_val, self$params)
-        f_m <- self$func_rhs(y_m, t_val, self$params)
-        J[, j] <- (f_p - f_m) / (2 * eps)
+        J[, j] <- (self$func_rhs(y_p, t_val, self$params) -
+                   self$func_rhs(y_m, t_val, self$params)) / (2 * eps)
       }
-      return(J)
+      J
     },
-    
-    # Forward Solver (Explicit Euler with Variable dt)
-    # -> dy/dt = f(t,y)  with non-linear f
+
+    # Forward integration via solve_ode. u is piecewise-constant per interval.
     solve_state = function(u_mat, y0) {
-      y_new <- matrix(0, self$n_steps, self$n_vars)
-      y_new[1, ] <- y0
-      
-      for (t in 1:(self$n_steps - 1)) {
-        y_prev <- y_new[t, ]
-        dt <- self$dt_vec[t]
-        
-        dy <- self$func_rhs(y_prev, self$times_sim[t], self$params)
-        y_new[t+1, ] <- y_prev + dt * (dy + u_mat[t, ])
-      }
-      return(y_new)
+      u_fn   <- function(t) u_mat[pmax(1L, pmin(findInterval(t, self$times_sim), self$n_steps)), ]
+      jac_fn <- function(y, t) self$get_jacobian(y, t)
+      rhs    <- function(y, t) self$func_rhs(y, t, self$params) + u_fn(t)
+      solve_ode(self$method, rhs, y0, self$times_sim, jac_fn)
     },
-    
-    # Backward Solver (Adjoint) - Handles NAs and Variable dt
-    # -dp/dt = J^Tp + res
-    solve_adjoint = function(y_curr) {
-      p_new <- matrix(0, self$n_steps, self$n_vars)
 
-      # terminal condition is p[T] = (2/n_steps) * r[T]
-      # if r[T] = 0, then the terminal conditional is 0
-      resid_T <- y_curr[self$n_steps, ] - self$observations_mapped[self$n_steps, ]
-      resid_T[is.na(resid_T)] <- 0
-      p_new[self$n_steps, ] <- (2 / self$n_steps) * resid_T
-
-      # Backward loop from T-1 down to 1
-      # Adjoint update: p[t] = (I + dt*J^T) * p[t+1]  +  (2/n_steps) * r[t]
-      for (t in (self$n_steps - 1):1) {
-        dt    <- self$dt_vec[t]
-        y_now <- y_curr[t, ]
-
-        # 1. Residual at current time t
-        resid <- y_now - self$observations_mapped[t, ]
-        resid[is.na(resid)] <- 0
-
-        forcing <- (2 / self$n_steps) * resid
-
-        # 2. Jacobian at current state
-        J <- self$get_jacobian(y_now, self$times_sim[t])
-
-        # 3. Adjoint update
-        grad_prop  <- t(J) %*% p_new[t + 1, ]
-        p_new[t, ] <- p_new[t + 1, ] + dt * as.vector(grad_prop) + forcing
-      }
-      return(p_new)
+    # Backward integration via solve_adjoint_ode. source_fn encodes the
+    # observation residual: source_fn(t_idx) = (2/ns)*(y[t] - obs[t]).
+    solve_adjoint = function(y_curr, aux = NULL) {
+      jac_fn    <- function(y, t) self$get_jacobian(y, t)
+      source_fn <- private$make_source_fn(y_curr)
+      solve_adjoint_ode(self$method, y_curr, aux,
+                        self$times_sim, self$dt_vec, jac_fn, source_fn)
     },
-    
-    # Cost & Gradient
+
+    solve_state_adjoint = function(u_mat, y0) {
+      fwd <- self$solve_state(u_mat, y0)
+      if (!all(is.finite(fwd$y)))
+        return(list(y = fwd$y, p = NULL, grad_contrib = NULL, converged = FALSE))
+      bwd <- self$solve_adjoint(fwd$y, fwd$aux)
+      list(y = fwd$y, p = bwd$p, grad_contrib = bwd$grad_contrib, converged = TRUE)
+    },
+
     cost_function = function(u_flat, y0) {
-      u_mat <- matrix(u_flat, self$n_steps, self$n_vars)
-      y_sim <- self$solve_state(u_mat, y0)
+      ns    <- self$n_steps; nv <- self$n_vars
+      u_mat <- matrix(u_flat, ns, nv)
 
-      # Guard: forward Euler can blow up at extreme parameters
-      if (!all(is.finite(y_sim))) return(1e20)
+      sol <- self$solve_state_adjoint(u_mat, y0)
+      if (!sol$converged || !all(is.finite(sol$y))) return(1e20)
 
-      # SSE only on non-NA slots
-      sse <- sum((self$observations_mapped - y_sim)^2, na.rm = TRUE)
-      reg <- self$lambda * sum(u_mat^2)
-      return((1/self$n_steps) * sse + reg)
+      private$cache_u            <- u_flat
+      private$cache_y            <- sol$y
+      private$cache_p            <- sol$p
+      private$cache_grad_contrib <- sol$grad_contrib
+
+      sse    <- sum((self$observations_mapped - sol$y)^2, na.rm = TRUE)
+      dt_l   <- c(0, self$dt_vec[seq_len(ns - 1L)])
+      w_trap <- (dt_l + self$dt_vec) / 2
+      reg    <- self$lambda * sum(w_trap * rowSums(u_mat^2))
+      (1 / ns) * sse + reg
     },
-    
+
     gradient_function = function(u_flat, y0) {
-      u_mat <- matrix(u_flat, self$n_steps, self$n_vars)
-
-      # Forward pass: get the state trajectory for the current u.
-      y_sim <- self$solve_state(u_mat, y0)
-
-      # Guard: ODE blew up — return regularisation gradient (pushes u → 0)
-      if (!all(is.finite(y_sim))) return(2 * self$lambda * u_flat)
-
-      # Build the linear BVP that jointly represents
-      #   Forward:  y[t+1] = A[t]*y[t] + b[t]              (C = 0: u is fixed)
-      #   Backward: p[t]   = D[t]*p[t+1] + E[t]*y[t]
-      # and solve it with solve_linear_bvp_riccati to obtain (Y = y, P = adjoint).
-      # With C = 0 the Riccati matrix R[t] = 0 throughout, so the forward sweep
-      # reproduces y_sim exactly and the backward substitution gives the adjoint.
       ns <- self$n_steps; nv <- self$n_vars
 
-      obs_mask  <- matrix(as.numeric(!is.na(self$observations_mapped)), ns, nv)
-      obs_clean <- self$observations_mapped; obs_clean[is.na(obs_clean)] <- 0
+      cache_valid <- !is.null(private$cache_u) &&
+                     length(private$cache_u) == length(u_flat) &&
+                     isTRUE(all.equal(private$cache_u, u_flat, tolerance = 0))
 
-      A_list <- vector("list", ns - 1L)
-      C_list <- vector("list", ns - 1L)
-      D_list <- vector("list", ns - 1L)
-      E_list <- vector("list", ns - 1L)
-      b_list <- vector("list", ns - 1L)
-      f_list <- vector("list", ns - 1L)
-
-      for (t in seq_len(ns - 1L)) {
-        dt <- self$dt_vec[t]
-        Jt <- self$get_jacobian(y_sim[t, ], self$times_sim[t])
-        At <- diag(nv) + dt * Jt
-
-        A_list[[t]] <- At
-        C_list[[t]] <- matrix(0, nv, nv)                        # no p→y coupling
-        D_list[[t]] <- diag(nv) + dt * t(Jt)
-        E_obs <- matrix(0, nv, nv)
-        diag(E_obs) <- (2 / ns) * obs_mask[t, ]
-        E_list[[t]] <- E_obs
-
-        # b[t] encodes the (nonlinear) forward step via residual:
-        #   b[t] = y[t+1] - A[t]*y[t]  so that A[t]*y[t] + b[t] = y[t+1]
-        b_list[[t]] <- matrix(y_sim[t + 1L, ] - At %*% y_sim[t, ], nv, 1)
-        # Backward forcing: -(2/ns)*mask[t]*obs_clean[t] so that
-        # E[t]*y[t] + f[t] = (2/ns)*mask[t]*(y[t] - obs_clean[t])
-        f_list[[t]] <- matrix(-(2 / ns) * obs_mask[t, ] * obs_clean[t, ], nv, 1)
+      if (!cache_valid) {
+        u_mat <- matrix(u_flat, ns, nv)
+        sol   <- self$solve_state_adjoint(u_mat, y0)
+        private$cache_u            <- u_flat
+        private$cache_y            <- sol$y
+        private$cache_p            <- sol$p
+        private$cache_grad_contrib <- sol$grad_contrib
       }
 
-      E_T <- matrix(0, nv, nv)
-      diag(E_T) <- (2 / ns) * obs_mask[ns, ]
-      f_T <- matrix(-(2 / ns) * obs_mask[ns, ] * obs_clean[ns, ], nv, 1)
+      u_mat  <- matrix(u_flat, ns, nv)
+      dt_l   <- c(0, self$dt_vec[seq_len(ns - 1L)])
+      w_trap <- matrix((dt_l + self$dt_vec) / 2, ns, nv)
+      as.vector(2 * self$lambda * w_trap * u_mat + private$cache_grad_contrib)
+    },
 
-      bvp <- solve_linear_bvp_riccati(
-        ns = ns, ny = nv, nrhs = 1L,
-        A_list = A_list, C_list = C_list, b_list = b_list,
-        D_list = D_list, E_list = E_list, f_list = f_list,
-        y0_mat = matrix(y0, nv, 1),
-        E_T    = E_T, f_T = f_T
+    optimize_bvp = function(y0, z_init = NULL,
+                            max_iter = 50L, tol = 1e-8, verbose = FALSE) {
+      ns <- self$n_steps; ny <- self$n_vars
+      jac_fn <- function(y, t) self$get_jacobian(y, t)
+
+      if (length(y0) == 1L && is.na(y0)) {
+        first_row <- which(!is.na(self$observations_mapped[, 1L]))[1L]
+        y0 <- self$observations_mapped[first_row, ]; y0[is.na(y0)] <- 0
+      } else if (any(is.na(y0))) {
+        for (v in seq_len(ny)) {
+          if (is.na(y0[v])) {
+            first_v <- which(!is.na(self$observations_mapped[, v]))[1L]
+            y0[v] <- if (!is.na(first_v)) self$observations_mapped[first_v, v] else 0
+          }
+        }
+      }
+
+      obs_clean   <- self$observations_mapped; obs_clean[is.na(obs_clean)] <- 0
+      obs_mask    <- matrix(as.numeric(!is.na(self$observations_mapped)), ns, ny)
+      two_lam     <- 2 * self$lambda
+      two_over_ns <- 2 / ns
+
+      t_keys  <- as.character(round(self$times_sim, 10))
+      t_lut   <- setNames(seq_len(ns), t_keys)
+      get_idx <- function(t_val) t_lut[[as.character(round(t_val, 10))]]
+
+      F_rhs_inner <- function(t_val, z) {
+        y_t <- z[seq_len(ny)]; p_t <- z[ny + seq_len(ny)]
+        ti  <- get_idx(t_val)
+        fy  <- self$func_rhs(y_t, t_val, self$params)
+        Jfy <- self$get_jacobian(y_t, t_val)
+        c(fy - p_t / two_lam,
+          as.vector(-(t(Jfy) %*% p_t)) -
+            two_over_ns * obs_mask[ti, ] * (y_t - obs_clean[ti, ]))
+      }
+
+      obs_T  <- obs_clean[ns, ]; mask_T <- obs_mask[ns, ]
+      bc_inner <- function(z_l, z_r) {
+        c(z_l[seq_len(ny)] - y0,
+          z_r[ny + seq_len(ny)] - two_over_ns * mask_T * (z_r[seq_len(ny)] - obs_T))
+      }
+
+      if (is.null(z_init)) {
+        rhs_euler  <- function(y, t) self$func_rhs(y, t, self$params)
+        y_guess    <- solve_euler(rhs_euler, y0, self$times_sim)$y
+        source_fn  <- private$make_source_fn(y_guess)
+        p_guess    <- solve_adjoint_ode("euler", y_guess, NULL,
+                                        self$times_sim, self$dt_vec, jac_fn, source_fn)$p
+        z_init     <- cbind(y_guess, p_guess)
+      }
+
+      sol <- solve_bvp_colloc(
+        F_rhs       = F_rhs_inner,
+        bc_residual = bc_inner,
+        t_grid      = self$times_sim,
+        z_init      = z_init,
+        max_iter    = max_iter,
+        tol         = tol,
+        verbose     = verbose
       )
 
-      p_sim <- matrix(bvp$P[, , 1L], ns, nv)
-
-      # dJ/du[t] = 2*lambda*u[t] + dt[t]*p[t+1]
-      p_shifted <- rbind(p_sim[-1, , drop = FALSE], matrix(0, 1, nv))
-      dt_col    <- matrix(self$dt_vec, nrow = ns, ncol = nv)
-      grad      <- 2 * self$lambda * u_mat + p_shifted * dt_col
-
-      return(as.vector(grad))
+      y_sol <- sol$z[, seq_len(ny), drop = FALSE]
+      p_sol <- sol$z[, ny + seq_len(ny), drop = FALSE]
+      self$y <- y_sol; self$p <- p_sol; self$u <- -p_sol / two_lam
+      sol
     },
-    
-    optimize = function(y0, max_iter = 100, u_init = NULL, reltol = sqrt(.Machine$double.eps)) {
-      # u_init: optional warm-start forcing (flat vector, length n_steps*n_vars).
-      # Passing the previous optimal u avoids restarting from zero at each outer
-      # iteration, which keeps the inner solver on the same local-minimum branch
-      # and makes y*(theta) vary smoothly with theta.
-      # When NULL (first call or cold start), fall back to u=0.
-      if (is.null(u_init)) {
-        u_init <- rep(0, self$n_steps * self$n_vars)
-      }
-      
-      # If y0 is not provided (scalar NA), initialise from the first observation row
+
+    optimize = function(y0, max_iter = 100, u_init = NULL,
+                        reltol = sqrt(.Machine$double.eps)) {
+      if (is.null(u_init)) u_init <- rep(0, self$n_steps * self$n_vars)
+
       if (length(y0) == 1 && is.na(y0)) {
         first_row <- which(!is.na(self$observations_mapped[, 1]))[1]
-        y0 <- self$observations_mapped[first_row, ]
-        y0[is.na(y0)] <- 0   # fallback for variables without an obs at t=0
+        y0 <- self$observations_mapped[first_row, ]; y0[is.na(y0)] <- 0
       } else if (any(is.na(y0))) {
-        # Vector y0 with some NA entries: fill per-variable from first available obs
         for (v in seq_len(self$n_vars)) {
           if (is.na(y0[v])) {
             first_v <- which(!is.na(self$observations_mapped[, v]))[1]
@@ -215,14 +230,19 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
           }
         }
       }
+
       res <- optim(par = u_init, fn = self$cost_function, gr = self$gradient_function,
                    y0 = y0, method = "BFGS",
                    control = list(maxit = max_iter, reltol = reltol, trace = 1))
-      
+
       self$u <- matrix(res$par, self$n_steps, self$n_vars)
-      self$y <- self$solve_state(self$u, y0)
-      self$p <- self$solve_adjoint(self$y)
-      return(res)
+      if (!is.null(private$cache_y)) {
+        self$y <- private$cache_y; self$p <- private$cache_p
+      } else {
+        sol <- self$solve_state_adjoint(self$u, y0)
+        self$y <- sol$y; self$p <- sol$p
+      }
+      res
     }
   )
 )

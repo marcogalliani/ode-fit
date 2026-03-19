@@ -8,7 +8,6 @@
 #
 # WHAT IS TESTED:
 #   T1. Gradient consistency  -- adjoint gradient vs central finite differences
-#       Designed to FAIL on current code (Bugs 1 & 2) and PASS after fixes.
 #   T2. Zero-forcing baseline -- cost_function and gradient_function are finite
 #       and self-consistent when u = 0.
 #   T3. Cost monotonicity     -- optimize() strictly lowers the cost.
@@ -51,8 +50,6 @@ euler_solve <- function(rhs, y0, times, params) {
 
 # ---------------------------------------------------------------------------
 # T1. Gradient consistency: 1-D exponential decay
-#     Targets Bug 1 (wrong boundary condition) and Bug 2 (off-by-one in grad).
-#     Expected to FAIL before fixes, PASS afterwards.
 # ---------------------------------------------------------------------------
 describe("T1: Gradient consistency — 1-D exponential decay", {
 
@@ -332,7 +329,8 @@ describe("T7: Gradient consistency — 2-D Lotka-Volterra", {
     obs_times  = times_sim,
     obs_values = obs_data,
     params     = params,
-    lambda     = 0.1
+    lambda     = 0.1,
+    method = "cn"
   )
 
   set.seed(9)
@@ -361,6 +359,307 @@ describe("T7: Gradient consistency — 2-D Lotka-Volterra", {
     )
   })
 })
+
+# ---------------------------------------------------------------------------
+# T8. GL1 gradient consistency — 1-D exponential decay.
+#     GL1 (implicit midpoint) is self-adjoint: the exact discrete adjoint
+#     uses the same method run backward, so the gradient is exact.
+#     Same tight thresholds as T1 (CN).
+# ---------------------------------------------------------------------------
+describe("T8: GL1 method — gradient consistency with finite differences (1-D decay)", {
+
+  params    <- list(k = 0.5)
+  times_sim <- seq(0, 2, by = 0.1)
+  y0        <- 5.0
+  y_true    <- matrix(y0 * exp(-params$k * times_sim), ncol = 1)
+
+  solver <- OdeSystemSolver$new(
+    func_rhs   = decay_rhs,
+    times_sim  = times_sim,
+    obs_times  = times_sim,
+    obs_values = y_true,
+    params     = params,
+    lambda     = 0.05,
+    method     = "gl1"
+  )
+
+  set.seed(10)
+  u_test <- rnorm(solver$n_steps * solver$n_vars, sd = 0.1)
+
+  chk <- check_gradient(
+    fn  = solver$cost_function,
+    gr  = solver$gradient_function,
+    par = u_test,
+    eps = 1e-5,
+    y0  = y0
+  )
+
+  test_that("GL1 max relative FD error < 1e-3 (exact discrete adjoint)", {
+    expect_less_than(chk$max_rel_error, 1e-3,
+      sprintf("max rel error = %.4e, cosine sim = %.6f",
+              chk$max_rel_error, chk$cosine_similarity))
+  })
+
+  test_that("GL1 cosine similarity > 0.9999", {
+    expect_greater_than(chk$cosine_similarity, 0.9999,
+      sprintf("cosine sim = %.6f", chk$cosine_similarity))
+  })
+})
+
+
+# ---------------------------------------------------------------------------
+# T9. GL1 gradient consistency — 2-D Lotka-Volterra.
+#     Confirms self-adjoint exactness carries over to nonlinear multi-var.
+# ---------------------------------------------------------------------------
+describe("T9: GL1 method — gradient consistency with finite differences (2-D LV)", {
+
+  params    <- list(alpha = 1.1, beta = 0.4, delta = 0.1, gamma = 0.4)
+  times_sim <- seq(0, 3, by = 0.2)
+  y0        <- c(5, 3)
+
+  y_lv <- euler_solve(lv_rhs, y0, times_sim, params)
+  set.seed(11)
+  obs_lv <- y_lv + matrix(rnorm(length(y_lv), 0, 0.5), nrow(y_lv), 2)
+
+  solver <- OdeSystemSolver$new(
+    func_rhs   = lv_rhs,
+    times_sim  = times_sim,
+    obs_times  = times_sim,
+    obs_values = obs_lv,
+    params     = params,
+    lambda     = 0.1,
+    method     = "gl1"
+  )
+
+  set.seed(12)
+  u_test <- rnorm(solver$n_steps * solver$n_vars, sd = 0.05)
+
+  chk_gl1 <- check_gradient(
+    fn  = solver$cost_function,
+    gr  = solver$gradient_function,
+    par = u_test,
+    eps = 1e-8,
+    y0  = y0
+  )
+
+  test_that("GL1 2-D max relative FD error < 1e-3 (exact discrete adjoint)", {
+    expect_less_than(chk_gl1$max_rel_error, 1e-3,
+      sprintf("max rel error = %.4e, cosine sim = %.6f",
+              chk_gl1$max_rel_error, chk_gl1$cosine_similarity))
+  })
+
+  test_that("GL1 2-D cosine similarity > 0.9999", {
+    expect_greater_than(chk_gl1$cosine_similarity, 0.9999,
+      sprintf("cosine sim = %.6f", chk_gl1$cosine_similarity))
+  })
+
+  solver <- OdeSystemSolver$new(
+    func_rhs   = lv_rhs,
+    times_sim  = times_sim,
+    obs_times  = times_sim,
+    obs_values = obs_lv,
+    params     = params,
+    lambda     = 0.1,
+    method     = "gl2"
+  )
+
+  set.seed(12)
+  u_test <- rnorm(solver$n_steps * solver$n_vars, sd = 0.05)
+
+  chk_gl2 <- check_gradient(
+    fn  = solver$cost_function,
+    gr  = solver$gradient_function,
+    par = u_test,
+    eps = 1e-8,
+    y0  = y0
+  )
+
+  test_that("GL2 max relative FD error < 1e-3 (exact discrete adjoint)", {
+    expect_less_than(chk_gl2$max_rel_error, 1e-3,
+      sprintf("max rel error = %.4e, cosine sim = %.6f",
+              chk_gl2$max_rel_error, chk_gl2$cosine_similarity))
+  })
+
+  test_that("GL2 cosine similarity > 0.9999", {
+    expect_greater_than(chk_gl2$cosine_similarity, 0.9999,
+      sprintf("cosine sim = %.6f", chk_gl2$cosine_similarity))
+  })
+})
+
+# ---------------------------------------------------------------------------
+# T11 (GL2 2-D). GL2 gradient consistency — 2-D Lotka-Volterra.
+# ---------------------------------------------------------------------------
+describe("T11: GL2 method — gradient consistency with finite differences (2-D LV)", {
+
+  params    <- list(alpha = 1.1, beta = 0.4, delta = 0.1, gamma = 0.4)
+  times_sim <- seq(0, 3, by = 0.2)
+  y0        <- c(5, 3)
+
+  y_lv <- euler_solve(lv_rhs, y0, times_sim, params)
+  set.seed(21)
+  obs_lv <- y_lv + matrix(rnorm(length(y_lv), 0, 0.5), nrow(y_lv), 2)
+
+  solver <- OdeSystemSolver$new(
+    func_rhs   = lv_rhs,
+    times_sim  = times_sim,
+    obs_times  = times_sim,
+    obs_values = obs_lv,
+    params     = params,
+    lambda     = 0.1,
+    method     = "gl2"
+  )
+
+  set.seed(22)
+  u_test <- rnorm(solver$n_steps * solver$n_vars, sd = 0.05)
+
+  chk <- check_gradient(
+    fn  = solver$cost_function,
+    gr  = solver$gradient_function,
+    par = u_test,
+    eps = 1e-5,
+    y0  = y0
+  )
+
+  test_that("GL2 2-D max relative FD error < 1e-3 (exact discrete adjoint)", {
+    expect_less_than(chk$max_rel_error, 1e-3,
+      sprintf("max rel error = %.4e, cosine sim = %.6f",
+              chk$max_rel_error, chk$cosine_similarity))
+  })
+
+  test_that("GL2 2-D cosine similarity > 0.9999", {
+    expect_greater_than(chk$cosine_similarity, 0.9999,
+      sprintf("cosine sim = %.6f", chk$cosine_similarity))
+  })
+})
+
+
+# ---------------------------------------------------------------------------
+# T12. optimize() vs optimize_bvp() — 1-D exponential decay (method = "cn").
+#      Both methods must reduce cost and produce close trajectories.
+# ---------------------------------------------------------------------------
+describe("T12: optimize vs optimize_bvp — 1-D decay, cost reduction and trajectory agreement", {
+
+  params    <- list(k = 0.4)
+  times_sim <- seq(0, 2, by = 0.1)
+  y0        <- 3.0
+
+  set.seed(13)
+  y_obs_10 <- matrix(
+    y0 * exp(-params$k * times_sim) + rnorm(length(times_sim), 0, 0.05),
+    ncol = 1
+  )
+
+  make_solver_10 <- function() {
+    OdeSystemSolver$new(
+      func_rhs   = decay_rhs,
+      times_sim  = times_sim,
+      obs_times  = times_sim,
+      obs_values = y_obs_10,
+      params     = params,
+      lambda     = 0.1,
+      method     = "cn"
+    )
+  }
+
+  u_zero <- rep(0, length(times_sim))
+  cost0  <- make_solver_10()$cost_function(u_zero, y0)
+
+  solver_bfgs_10 <- make_solver_10()
+  set.seed(14)
+  solver_bfgs_10$optimize(y0 = y0, max_iter = 100)
+  cost_bfgs <- solver_bfgs_10$cost_function(as.vector(solver_bfgs_10$u), y0)
+
+  solver_bvp_10 <- make_solver_10()
+  solver_bvp_10$optimize_bvp(y0 = y0)
+  cost_bvp <- solver_bvp_10$cost_function(as.vector(solver_bvp_10$u), y0)
+
+  test_that("optimize() strictly reduces cost vs u = 0", {
+    expect_less_than(cost_bfgs, cost0,
+      sprintf("before = %.6g, after = %.6g", cost0, cost_bfgs))
+  })
+
+  test_that("optimize_bvp() strictly reduces cost vs u = 0", {
+    expect_less_than(cost_bvp, cost0,
+      sprintf("before = %.6g, after = %.6g", cost0, cost_bvp))
+  })
+
+  test_that("optimize_bvp() and optimize() costs agree within a factor of 5", {
+    expect_less_than(cost_bvp / cost_bfgs, 5,
+      sprintf("bvp = %.6g, bfgs = %.6g", cost_bvp, cost_bfgs))
+  })
+
+  rmse_traj   <- sqrt(mean((solver_bfgs_10$y - solver_bvp_10$y)^2))
+  state_range <- diff(range(y_obs_10))
+
+  test_that("trajectories from optimize and optimize_bvp agree within 20% of state range", {
+    expect_less_than(rmse_traj / state_range, 0.2,
+      sprintf("RMSE = %.4g, range = %.4g", rmse_traj, state_range))
+  })
+})
+
+
+# ---------------------------------------------------------------------------
+# T11. optimize() vs optimize_bvp() — 2-D Lotka-Volterra.
+#      Both methods must reduce cost and produce close trajectories.
+# ---------------------------------------------------------------------------
+describe("T13: optimize vs optimize_bvp — 2-D LV, cost reduction and trajectory agreement", {
+
+  params    <- list(alpha = 1.1, beta = 0.4, delta = 0.1, gamma = 0.4)
+  times_sim <- seq(0, 3, by = 0.2)
+  y0        <- c(5, 3)
+
+  y_lv_11 <- euler_solve(lv_rhs, y0, times_sim, params)
+  set.seed(15)
+  obs_lv_11 <- y_lv_11 + matrix(rnorm(length(y_lv_11), 0, 0.5), nrow(y_lv_11), 2)
+
+  make_solver_11 <- function() {
+    OdeSystemSolver$new(
+      func_rhs   = lv_rhs,
+      times_sim  = times_sim,
+      obs_times  = times_sim,
+      obs_values = obs_lv_11,
+      params     = params,
+      lambda     = 0.1,
+      method     = "cn"
+    )
+  }
+
+  u_zero <- rep(0, nrow(obs_lv_11) * ncol(obs_lv_11))
+  cost0  <- make_solver_11()$cost_function(u_zero, y0)
+
+  solver_bfgs_11 <- make_solver_11()
+  set.seed(16)
+  solver_bfgs_11$optimize(y0 = y0, max_iter = 100)
+  cost_bfgs <- solver_bfgs_11$cost_function(as.vector(solver_bfgs_11$u), y0)
+
+  solver_bvp_11 <- make_solver_11()
+  solver_bvp_11$optimize_bvp(y0 = y0)
+  cost_bvp <- solver_bvp_11$cost_function(as.vector(solver_bvp_11$u), y0)
+
+  test_that("2-D LV: optimize() strictly reduces cost vs u = 0", {
+    expect_less_than(cost_bfgs, cost0,
+      sprintf("before = %.6g, after = %.6g", cost0, cost_bfgs))
+  })
+
+  test_that("2-D LV: optimize_bvp() strictly reduces cost vs u = 0", {
+    expect_less_than(cost_bvp, cost0,
+      sprintf("before = %.6g, after = %.6g", cost0, cost_bvp))
+  })
+
+  test_that("2-D LV: optimize_bvp() and optimize() costs agree within a factor of 5", {
+    expect_less_than(cost_bvp / cost_bfgs, 5,
+      sprintf("bvp = %.6g, bfgs = %.6g", cost_bvp, cost_bfgs))
+  })
+
+  rmse_traj   <- sqrt(mean((solver_bfgs_11$y - solver_bvp_11$y)^2))
+  state_range <- diff(range(obs_lv_11))
+
+  test_that("2-D LV: trajectories agree within 20% of state range", {
+    expect_less_than(rmse_traj / state_range, 0.2,
+      sprintf("RMSE = %.4g, range = %.4g", rmse_traj, state_range))
+  })
+})
+
 
 # ---------------------------------------------------------------------------
 # Print summary

@@ -108,10 +108,10 @@ describe("BV2", {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-cat("=== BV3: gradient_function == adjoint of solve_state ===\n")
+cat("=== BV3: gradient_function consistent with finite differences of cost_function ===\n")
 # ─────────────────────────────────────────────────────────────────────────────
-# The BVP-based gradient_function must match the original
-# solve_state + solve_adjoint pipeline.
+# gradient_function must be the exact gradient of cost_function (CN
+# discretisation + exact discrete adjoint).  Verified via central FD.
 describe("BV3", {
   k <- 0.5
   f_lin <- function(y, t, p) -p$k * y
@@ -130,16 +130,20 @@ describe("BV3", {
   set.seed(2)
   u_test <- rnorm(solver$n_steps * solver$n_vars, sd = 0.1)
 
-  grad_bvp <- solver$gradient_function(u_test, 1.0)
+  chk <- check_gradient(
+    fn  = solver$cost_function,
+    gr  = solver$gradient_function,
+    par = u_test,
+    eps = 1e-5,
+    y0  = 1.0
+  )
 
-  # Reference: original solve_state + solve_adjoint pipeline
-  u_mat  <- matrix(u_test, solver$n_steps, solver$n_vars)
-  y_ref  <- solver$solve_state(u_mat, 1.0)
-  p_ref  <- solver$solve_adjoint(y_ref)
-  p_sh   <- rbind(p_ref[-1, , drop = FALSE], matrix(0, 1, solver$n_vars))
-  dt_col <- matrix(solver$dt_vec, solver$n_steps, solver$n_vars)
-  grad_ref <- as.vector(2 * lambda * u_mat + p_sh * dt_col)
+  test_that("max relative FD error < 1e-3 (CN adjoint matches finite differences)",
+    expect_less_than(chk$max_rel_error, 1e-3,
+      sprintf("max rel error = %.4e, cosine sim = %.6f",
+              chk$max_rel_error, chk$cosine_similarity)))
 
-  test_that("BVP gradient matches adjoint gradient (max diff < 1e-10)",
-    expect_less_than(max(abs(grad_bvp - grad_ref)), 1e-10))
+  test_that("cosine similarity > 0.9999",
+    expect_greater_than(chk$cosine_similarity, 0.9999,
+      sprintf("cosine sim = %.6f", chk$cosine_similarity)))
 })
