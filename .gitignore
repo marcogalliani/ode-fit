@@ -17,3 +17,7 @@ ode-fit.Rproj
 # vscode
 .vscode
 
+# other
+colloc-infer/
+CLAUDE.md
+data/
