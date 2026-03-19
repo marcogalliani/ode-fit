@@ -11,6 +11,7 @@ J(u,\theta) = \sum_{j}(y_{j}-y(t_{j}))^{2}+ \lambda \int_{[0,T]} ||u||^{2}dt
     y(0) = y_{0}
 \end{cases}
 $$
+
 where $\theta$ is a vector parameter used to parametrise the regularising ODE model. The $\lambda$ parameter allows the model to span from a pure data-fitting framework ($\lambda \to 0$) to pure parameter estimation ($\lambda \to \infty$). 
 
 
@@ -25,10 +26,13 @@ The repo implements two major approaches to solve the estimation problems, which
 
 ### Parameter cascading
 The Parameter Cascading approach [(Ramsay,2007)](https://doi.org/10.1111/j.1467-9868.2007.00610.x) implemented in `src/solvers/parameter_cascading.R` consists of a multi-criteria approach. The optimisation problem is then slightly different from the estimation problem presented before. In particular, we distinguish between an outer optimisation criterion with respect to $\theta$
+
 $$
 H(\theta) = \sum_{j} (y_{j}-y(t_{j}))^{2},
 $$
+
 and an inner one to be optimised with respect to $u$ (with $\theta$ fixed):
+
 $$
 J(u,\theta) = \sum_{j}(y_{j}-y(t_{j}))^{2}+ \lambda \int_{[0,T]} ||u||^{2}dt 
 \\
@@ -41,6 +45,7 @@ J(u,\theta) = \sum_{j}(y_{j}-y(t_{j}))^{2}+ \lambda \int_{[0,T]} ||u||^{2}dt
 $$
 
 The inner problem is solved using an iterative scheme that employs the adjoint method to compute the gradient of the optimal control problem governed by the ODE. The gradient computation is based on the followigng optimality system:
+
 $$
 \begin{cases}
     \frac{dy}{dt} = f(t,y(t), \theta) + u(t) \\
@@ -48,9 +53,11 @@ $$
     u + \frac{1}{2\lambda}p \geq0
 \end{cases}
 $$
+
 The inner gradient is then fed into an appropriate optimisation algorithm to converge to the optimum. This optimisation scheme is implemented within `src/solvers/general_ode_system_solver.R`, more details on this solver will be provided later.
 
 On the other hand, the outer gradient is computed relying on the implicit function theorem. To see why, consider gradient of the outer error criterion expanded thorugh the chain rule
+
 $$
 \frac{dH}{d\theta} = \frac{\partial H}{\partial y} \frac{d y}{d \theta} 
 =  \frac{\partial H}{\partial y} (\frac{\partial y}{\partial \theta} +\frac{\partial y}{\partial u}\frac{d u}{d \theta}).
