@@ -15,21 +15,23 @@ source("src/solvers/ode_solvers.R")
 # Physics-informed smoother estimating unknown additive forcing u(t).
 #
 # Inner problem:
-#   min_u  (1/ns)·SSE(y)  +  λ · ∫u² dt
-#   s.t.   dy/dt = f(y, t, θ) + u(t),   y(t₁) = y₀
+#   min_u  (1/ns)*SSE(y)  +  lambda * integral(u^2) dt
+#   s.t.   dy/dt = f(y, t, theta) + u(t),   y(t_1) = y_0
 #
-# `method` selects the integrator: "cn", "gl1", or "gl2".
+# `method` selects the DtO scheme: "euler", "cn", "gl1", or "gl2".
+# The corresponding DtOSolver (from ode_solvers.R) wraps a DtO scheme that
+# provides both the forward integrator and its consistent discrete adjoint.
 # =============================================================================
 OdeSystemSolver <- R6Class("OdeSystemSolver",
 
   private = list(
+    dto_solver         = NULL,
     cache_u            = NULL,
     cache_y            = NULL,
     cache_p            = NULL,
     cache_grad_contrib = NULL,
 
-    # Builds the source_fn used by adjoint integrators:
-    #   source_fn(t_idx) = (2/ns) * (y[t] - obs[t]),  NA obs -> 0
+    # source_fn(t_idx) = (2/ns) * (y[t] - obs[t]),  NA obs -> 0
     make_source_fn = function(y_curr) {
       ns  <- self$n_steps
       obs <- self$observations_mapped
@@ -49,8 +51,7 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
     observations_mapped = NULL,
     y = NULL, u = NULL, p = NULL,
 
-    initialize = function(func_rhs, times_sim, obs_times, obs_values, params, lambda,
-                          method = "gl2") {
+    initialize = function(func_rhs, times_sim, obs_times, obs_values, params, lambda, method = "gl2") {
       self$func_rhs <- func_rhs
       obs_times  <- round(obs_times,  digits = 10)
       times_sim  <- sort(unique(round(c(times_sim, obs_times), digits = 10)))
@@ -61,6 +62,7 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
       self$n_vars    <- ncol(obs_values)
       self$dt_vec    <- c(diff(times_sim), 0)
       self$method    <- method
+      private$dto_solver <- make_dto_solver(method)
 
       self$observations_mapped <- matrix(NA, nrow = self$n_steps, ncol = self$n_vars)
       self$observations_mapped[times_sim %in% obs_times, ] <- obs_values
@@ -82,28 +84,26 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
       J
     },
 
-    # Forward integration via solve_ode. u is piecewise-constant per interval.
     solve_state = function(u_mat, y0) {
       u_fn   <- function(t) u_mat[pmax(1L, pmin(findInterval(t, self$times_sim), self$n_steps)), ]
       jac_fn <- function(y, t) self$get_jacobian(y, t)
       rhs    <- function(y, t) self$func_rhs(y, t, self$params) + u_fn(t)
-      solve_ode(self$method, rhs, y0, self$times_sim, jac_fn)
+      private$dto_solver$solve_state(rhs, y0, self$times_sim, jac_fn)
     },
 
-    # Backward integration via solve_adjoint_ode. source_fn encodes the
-    # observation residual: source_fn(t_idx) = (2/ns)*(y[t] - obs[t]).
-    solve_adjoint = function(y_curr, aux = NULL) {
+    solve_adjoint = function(y_fwd) {
+      rhs_cont  <- function(y, t) self$func_rhs(y, t, self$params)
       jac_fn    <- function(y, t) self$get_jacobian(y, t)
-      source_fn <- private$make_source_fn(y_curr)
-      solve_adjoint_ode(self$method, y_curr, aux,
-                        self$times_sim, self$dt_vec, jac_fn, source_fn)
+      source_fn <- private$make_source_fn(y_fwd)
+      pT        <- rep(0, self$n_vars)
+      private$dto_solver$solve_adjoint(rhs_cont, pT, jac_fn, source_fn)
     },
 
     solve_state_adjoint = function(u_mat, y0) {
       fwd <- self$solve_state(u_mat, y0)
       if (!all(is.finite(fwd$y)))
         return(list(y = fwd$y, p = NULL, grad_contrib = NULL, converged = FALSE))
-      bwd <- self$solve_adjoint(fwd$y, fwd$aux)
+      bwd <- self$solve_adjoint(fwd$y)
       list(y = fwd$y, p = bwd$p, grad_contrib = bwd$grad_contrib, converged = TRUE)
     },
 
@@ -191,12 +191,13 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
       }
 
       if (is.null(z_init)) {
-        rhs_euler  <- function(y, t) self$func_rhs(y, t, self$params)
-        y_guess    <- solve_euler(rhs_euler, y0, self$times_sim)$y
-        source_fn  <- private$make_source_fn(y_guess)
-        p_guess    <- solve_adjoint_ode("euler", y_guess, NULL,
-                                        self$times_sim, self$dt_vec, jac_fn, source_fn)$p
-        z_init     <- cbind(y_guess, p_guess)
+        euler_dto <- make_dto_solver("euler")
+        rhs_euler <- function(y, t) self$func_rhs(y, t, self$params)
+        y_guess   <- euler_dto$solve_state(rhs_euler, y0, self$times_sim)$y
+        source_fn <- private$make_source_fn(y_guess)
+        pT        <- rep(0, ny)
+        p_guess   <- euler_dto$solve_adjoint(rhs_euler, pT, jac_fn, source_fn)$p
+        z_init    <- cbind(y_guess, p_guess)
       }
 
       sol <- solve_bvp_colloc(

@@ -42,7 +42,13 @@ local({
   source("tests/test_tracking_ode_solver.R", local = TRUE)
 })
 
-# ---- Suite 4: BVP Solver (linear Riccati) ----
+# ---- Suite 4: ODE integrator accuracy ----
+cat("\n### ODE integrator accuracy ###\n")
+local({
+  source("tests/test_ode_accuracy.R", local = TRUE)
+})
+
+# ---- Suite 5: BVP Solver (linear Riccati) ----
 cat("\n### BVP Solver (Riccati) ###\n")
 local({
   source("tests/test_bvp_solver.R", local = TRUE)
@@ -52,6 +58,12 @@ local({
 cat("\n### BVP Collocation + optimize_bvp ###\n")
 local({
   source("tests/test_bvp_colloc.R", local = TRUE)
+})
+
+# ---- Suite 7: SQP OCP Solver ----
+cat("\n### SQP OCP Solver ###\n")
+local({
+  source("tests/test_sqp_ocp_solver.R", local = TRUE)
 })
 
 # ---- Combined summary ----

@@ -6,35 +6,21 @@ library(plotly)
 source("src/solvers/general_ode_system_solver.R")
 source("src/utils/trace_optimisation.R")
 source("examples/ode_models.R")
+source("examples/plot_utils.R")
 source("examples/sensitivity-analysis/sensitivity_utils.R")
 
 
 # =============================================================================
-# run_example — canonical OdeSystemSolver workflow
+# run_example -- canonical OdeSystemSolver workflow
 #
 # Arguments
 # ---------
 # cfg        ODE_CONFIGS entry from examples/ode_models.R.
-#            Provides: rhs (solver format), params (true physics), y0,
-#            times_obs, times_sim, active_params, uncertain_bounds.
 # lambda     Regularisation weight penalising large |u(t)|.
-#            The solver estimates u(t) to bridge model-data mismatch;
-#            higher lambda forces u(t) ~ 0 (trusts the physics more).
 # noise_sd   Std. dev. of additive Gaussian observation noise.
 #            NULL = auto: 5 % of the peak signal amplitude.
 # max_iter   Max L-BFGS-B iterations for the u(t) optimisation.
 # seed       Random seed for reproducible data generation.
-#
-# Workflow
-# --------
-# 1. Generate synthetic observations from cfg$params (true parameters).
-# 2. Run OdeSystemSolver$optimize() to recover the unknown forcing u(t).
-# 3. Plot state fit and residual forcing for every state variable.
-# 4. Run local sensitivity at the true generating parameters:
-#    - central-difference Jacobian -> Fisher Information Matrix
-#    - FIM rank / condition number (parameter identifiability)
-#    - parameter correlation matrix
-#    - time-resolved RMS sensitivity plot
 #
 # Returns the fitted OdeSystemSolver object invisibly.
 # =============================================================================
@@ -43,8 +29,6 @@ run_example <- function(cfg,
                         noise_sd  = NULL,
                         max_iter  = 200,
                         seed      = 123) {
-  rhs    <- cfg$rhs
-  params <- cfg$params
   y0     <- cfg$y0
   t_obs  <- cfg$times_obs
   t_sim  <- cfg$times_sim
@@ -52,67 +36,28 @@ run_example <- function(cfg,
   var_names <- if (!is.null(names(y0))) names(y0) else
     paste0("Var", seq_len(n_vars))
 
-  # 1. Synthetic data ---------------------------------------------------------
-  y_true  <- euler_solve(y0, t_sim, rhs, params)
-  obs_idx <- match(round(t_obs, 10), round(t_sim, 10))
-  stopifnot("obs times must be a subset of sim times" = !anyNA(obs_idx))
+  # 1. Synthetic data
+  syn <- generate_synthetic_data(cfg, noise_sd = noise_sd,
+                                 noise_pct = 0.05, seed = seed)
 
-  sd_use <- if (is.null(noise_sd))
-    0.05 * max(abs(y_true[obs_idx, , drop = FALSE]))
-  else
-    noise_sd
-  set.seed(seed)
-  obs_data <- y_true[obs_idx, , drop = FALSE] +
-    matrix(rnorm(length(obs_idx) * n_vars, 0, sd_use),
-           length(obs_idx), n_vars)
-
-  # 2. Solver -----------------------------------------------------------------
+  # 2. Solver
   cat("\n=== OdeSystemSolver  lambda =", lambda, "===\n")
   solver <- OdeSystemSolver$new(
-    func_rhs   = rhs,
+    func_rhs   = cfg$rhs,
     obs_times  = t_obs,
     times_sim  = t_sim,
-    obs_values = obs_data,
-    params     = params,
+    obs_values = syn$obs_data,
+    params     = cfg$params,
     lambda     = lambda
   )
   solver$optimize(y0 = y0, max_iter = max_iter)
 
-  # 3. Plots ------------------------------------------------------------------
-  sim_obs_idx <- which(round(t_sim, 10) %in% round(t_obs, 10))
+  # 3. Plots
+  plot_state_fit(solver$y, syn$obs_data, t_obs, t_sim, var_names)
+  plot_residual_forcing(solver$u, t_sim, var_names)
 
-  ps <- lapply(seq_len(n_vars), function(i) {
-    ggplot(
-      data.frame(t   = t_obs,
-                 obs = obs_data[, i],
-                 fit = solver$y[sim_obs_idx, i]),
-      aes(x = t)
-    ) +
-      geom_point(aes(y = obs), alpha = 0.4, size = 1) +
-      geom_line(aes(y = fit), color = "steelblue", linewidth = 1) +
-      labs(title = var_names[i], x = "Time", y = "State") +
-      theme_minimal()
-  })
-
-  pu <- lapply(seq_len(n_vars), function(i) {
-    ggplot(
-      data.frame(t = t_sim, u = solver$u[, i]),
-      aes(x = t, y = u)
-    ) +
-      geom_line(color = "tomato", linewidth = 0.8) +
-      geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
-      labs(title = paste0(var_names[i], "  u(t)"), x = "Time", y = "u") +
-      theme_minimal()
-  })
-
-  do.call(grid.arrange,
-          c(ps,  list(ncol = min(n_vars, 3), top = "State fit")))
-  do.call(grid.arrange,
-          c(pu,  list(ncol = min(n_vars, 3), top = "Residual forcing u(t)")))
-
-  # 4. Local sensitivity at true generating parameters -----------------------
+  # 4. Local sensitivity
   cat("\n--- Local sensitivity at true generating parameters ---\n")
-  cat("    (central-difference Jacobian; deSolve integrator)\n")
   sens_cfg <- make_sens_config(cfg)
   run_local_sensitivity(sens_cfg, verbose = TRUE)
 
@@ -121,12 +66,9 @@ run_example <- function(cfg,
 
 
 # =============================================================================
-# Specialised examples (test specific OdeSystemSolver capabilities)
+# Specialised examples
 # =============================================================================
 
-# Missing-data example --------------------------------------------------------
-# Demonstrates that OdeSystemSolver bridges observation gaps by relying on
-# the physics to propagate the state through the missing-data window.
 run_missing_data_example <- function(lambda = 1) {
   cat("\n=== OdeSystemSolver: missing-data (Lotka-Volterra) ===\n")
 
@@ -180,19 +122,15 @@ run_missing_data_example <- function(lambda = 1) {
 }
 
 
-# Discovery example -----------------------------------------------------------
-# The true dynamics contain a hidden external forcing 0.2*sin(t); the solver
-# recovers u(t) without any knowledge of the hidden term.
 run_discovery_example <- function(lambda = 0.01) {
   cat("\n=== OdeSystemSolver: dynamics-discovery example ===\n")
 
   k          <- 6e-2
-  simple_rhs <- function(y, t, p) -k * y^3   # assumed physics
+  simple_rhs <- function(y, t, p) -k * y^3
 
   times_sim <- seq(0.01, 10, by = 0.01)
   n_steps   <- length(times_sim)
 
-  # Truth: dy/dt = -k*y^(1/3) + 0.2*sin(t)
   y_true    <- numeric(n_steps)
   y_true[1] <- 10
   for (i in seq_len(n_steps - 1))
@@ -237,9 +175,6 @@ run_discovery_example <- function(lambda = 0.01) {
 }
 
 
-# SSE surface example ---------------------------------------------------------
-# Visualises the cost landscape in (alpha, beta) space with u = 0, so the
-# surface reflects pure parametric misfit.
 run_sse_surface_example <- function() {
   cat("\n=== OdeSystemSolver: SSE surface (Lotka-Volterra) ===\n")
 

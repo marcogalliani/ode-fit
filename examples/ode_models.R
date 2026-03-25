@@ -107,6 +107,20 @@ sb_asymptote_rhs <- function(y, t, p) {
 }
 
 
+# === 6. Sestak-Berggren k_ref variant (AccelStab comparison) ===
+# Arrhenius referenced at T_ref with explicit rate constant k_ref.
+# dx_i/dt = -(k_ref * exp(-(E/R)*(1/T_i - 1/T_ref)) / C0^(m+n-1)) *
+#            (C0 - x_i)^m * x_i^n
+# Used by examples/accel_stab_data.R for real-data comparisons.
+sb_kref_rhs <- function(y, t, p) {
+  eps <- 1e-6
+  x_eff <- pmax(pmin(y, p$C0 - eps), eps)
+  k_T <- p$k_ref * exp(-(p$E / p$R) * (1 / p$T_vec - 1 / p$T_ref))
+  scaling <- p$C0^(p$m + p$n - 1)
+  -(k_T / scaling) * (p$C0 - x_eff)^p$m * x_eff^p$n
+}
+
+
 # === Forward Euler integrator ===
 # Consistent with OdeSystemSolver / CascadingOdeSolver.  Used to generate
 # synthetic ground-truth data in examples.
@@ -152,6 +166,31 @@ make_sens_config <- function(cfg) {
     rhs_args         = all_pars[!is_scalar],
     uncertain_bounds = cfg$uncertain_bounds
   )
+}
+
+
+# === Synthetic data generator ===
+# Generates noisy observations from an ODE_CONFIGS entry.
+# Returns: list(obs_data, y_true, sd_used, obs_idx)
+generate_synthetic_data <- function(cfg, noise_sd = NULL, noise_pct = 0.02,
+                                    seed = 123) {
+  y_true  <- euler_solve(cfg$y0, cfg$times_sim, cfg$rhs, cfg$params)
+  obs_idx <- match(round(cfg$times_obs, 10), round(cfg$times_sim, 10))
+  stopifnot("obs times must be a subset of sim times" = !anyNA(obs_idx))
+
+  sd_used <- if (is.null(noise_sd))
+    noise_pct * max(abs(y_true[obs_idx, , drop = FALSE]))
+  else
+    noise_sd
+
+  set.seed(seed)
+  n_obs  <- length(obs_idx)
+  n_vars <- length(cfg$y0)
+  obs_data <- y_true[obs_idx, , drop = FALSE] +
+    matrix(rnorm(n_obs * n_vars, 0, sd_used), n_obs, n_vars)
+
+  list(obs_data = obs_data, y_true = y_true, sd_used = sd_used,
+       obs_idx = obs_idx)
 }
 
 

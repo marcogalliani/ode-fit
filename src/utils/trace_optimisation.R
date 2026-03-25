@@ -1,36 +1,39 @@
 library(ggplot2)
 library(gridExtra)
 
-# Plot the outer optimisation trace from a CascadingOdeSolver that has been run.
+# Plot the outer optimisation trace from a solver that has been run.
 #
 # Arguments:
-#   cascading    - a CascadingOdeSolver instance after optimize_parameters()
+#   solver       - a CascadingOdeSolver or TrackingOdeSolver after optimize_parameters()
 #   true_params  - named list of ground-truth values, e.g. list(k=0.5, alpha=1.1)
-#                  If provided, a dashed horizontal line is drawn for each parameter.
+#   cost_field   - name of the cost entry in history (default "sse")
+#   cost_label   - y-axis label for the cost plot
+#   title        - top-level title for the arranged plot
 #
 # Returns: invisibly, the list of ggplot objects.
-plot_param_trace <- function(cascading, true_params = NULL) {
-  history <- cascading$history
+plot_outer_trace <- function(solver, true_params = NULL,
+                             cost_field = "sse",
+                             cost_label = "SSE (log scale)",
+                             title = "Optimisation Progress") {
+  history <- solver$history
   if (length(history) == 0) {
     message("No optimisation history found. Run optimize_parameters() first.")
     return(invisible(NULL))
   }
 
   iters      <- sapply(history, `[[`, "iter")
-  sses       <- sapply(history, `[[`, "sse")
+  costs      <- sapply(history, `[[`, cost_field)
   params_mat <- do.call(rbind, lapply(history, `[[`, "params"))
   param_names <- colnames(params_mat)
 
-  # --- SSE convergence plot ---
-  df_sse <- data.frame(iter = iters, sse = sses)
-  p_sse <- ggplot(df_sse, aes(x = iter, y = sse)) +
+  df_cost <- data.frame(iter = iters, cost = costs)
+  p_cost <- ggplot(df_cost, aes(x = iter, y = cost)) +
     geom_line(color = "steelblue", linewidth = 0.8) +
     geom_point(color = "steelblue", size = 1.5) +
     scale_y_log10() +
-    labs(title = "Outer Objective (SSE)", x = "Outer Iteration", y = "SSE (log scale)") +
+    labs(title = "Outer Objective", x = "Outer Iteration", y = cost_label) +
     theme_minimal()
 
-  # --- Per-parameter trace plots ---
   param_plots <- lapply(param_names, function(nm) {
     df_p <- data.frame(iter = iters, value = params_mat[, nm])
     p <- ggplot(df_p, aes(x = iter, y = value)) +
@@ -58,10 +61,15 @@ plot_param_trace <- function(cascading, true_params = NULL) {
     arrangeGrob(grobs = param_plots, nrow = 1)
   }
 
-  grid.arrange(p_sse, param_row, nrow = 2,
-               top = "Parameter Cascading — Optimisation Progress")
+  grid.arrange(p_cost, param_row, nrow = 2, top = title)
 
-  invisible(c(list(p_sse), param_plots))
+  invisible(c(list(p_cost), param_plots))
+}
+
+plot_param_trace <- function(cascading, true_params = NULL) {
+  plot_outer_trace(cascading, true_params,
+                   cost_field = "sse", cost_label = "SSE (log scale)",
+                   title = "Parameter Cascading \u2014 Optimisation Progress")
 }
 
 
