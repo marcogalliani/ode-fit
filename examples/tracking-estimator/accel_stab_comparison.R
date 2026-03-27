@@ -5,7 +5,7 @@ source("examples/accel_stab_data.R")
 params       <- as_default_params
 params$m     <- 1
 y0           <- as_default_y0
-times_grid   <- as_times_grid(dt = 0.001)
+times_grid   <- as_times_grid(dt = 0.05)
 
 param_scales <- list(E = 10000, n = 1, C0 = 1, k_ref = 1, m = 1)
 fixed_params <- params[!names(params) %in% names(param_scales)]
@@ -16,23 +16,23 @@ tracking_solver <- TrackingOdeSolver$new(
   obs_times    = df_clean$time,
   times_sim    = times_grid,
   obs_values   = obs_matrix,
-  y0           = y0,
+  init_state   = function(p) as.numeric(rep(p$C0,ncol(obs_matrix))),
   fixed_params = fixed_params,
-  lambda       = 1e2,
+  lambda       = 1e-1,
   param_scales = param_scales
 )
 
 init_params <- params[names(param_scales)]
-l_bounds <- c(E = 10000, n = 0.1,
-              C0 = max(obs_matrix, na.rm = TRUE) + 0.1, k_ref = 1e-4,
-              m = 0.0001)
-u_bounds <- c(E = 300000, n = 20, C0 = 120, k_ref = 100, m = Inf)
+init_params$C0 <- mean(obs_matrix[1,], na.rm=T)
+
+lb_params <- rep(0, length(init_params))
+names(lb_params) <- names(init_params)
+
 
 result <- tracking_solver$optimize_parameters(
   init_theta_physical = unlist(init_params),
   param_names         = names(init_params),
-  lower_phys          = l_bounds,
-  upper_phys          = u_bounds
+  lower_phys = lb_params
 )
 
 # --- Visualization ----------------------------------------------------------

@@ -73,6 +73,15 @@ plot_param_trace <- function(cascading, true_params = NULL) {
 }
 
 
+extract_state_matrix <- function(state_sol) {
+  if (is.matrix(state_sol)) return(state_sol)
+  if (is.list(state_sol) && !is.null(state_sol$y) && is.matrix(state_sol$y)) {
+    return(state_sol$y)
+  }
+  stop("Solver state output must be a matrix or a list containing matrix $y")
+}
+
+
 trace_optimization <- function(solver, y0, max_iter = 100) {
   history_y <- list()
   u_init <- rep(0, solver$n_steps * solver$n_vars)
@@ -84,7 +93,7 @@ trace_optimization <- function(solver, y0, max_iter = 100) {
     
     # Reconstruct matrix and solve state for the snapshot
     u_mat <- matrix(u_flat, solver$n_steps, solver$n_vars)
-    current_y <- solver$solve_state(u_mat, y0)
+    current_y <- extract_state_matrix(solver$solve_state(u_mat, y0))
     
     # Store the trajectory
     history_y[[length(history_y) + 1]] <<- current_y
@@ -129,12 +138,20 @@ generate_optimization_gif <- function(solver, trace_results, y0,
                                       fps = 5, n_var = 1) {
   history   <- trace_results$history
   n_snaps   <- length(history)
+  if (n_snaps == 0L) {
+    stop("No optimisation snapshots found in trace_results$history")
+  }
+
   times_sim <- solver$times_sim
   obs_data  <- solver$observations_mapped
+  if (n_var < 1L || n_var > ncol(obs_data)) {
+    stop("n_var out of bounds for available state variables")
+  }
+
   W <- 800L; H <- 600L
 
   # Axis limits computed once
-  traj_vals <- unlist(lapply(history, function(h) h[, n_var]))
+  traj_vals <- unlist(lapply(history, function(h) extract_state_matrix(h)[, n_var]))
   ylim <- range(c(obs_data[, n_var], traj_vals), na.rm = TRUE)
   xlim <- range(times_sim)
 
@@ -165,7 +182,7 @@ generate_optimization_gif <- function(solver, trace_results, y0,
       ghost_layer <- image_graph(width = W, height = H, res = 96,
                                  bg = "transparent")
       overlay_plot()
-      lines(times_sim, history[[i - 1L]][, n_var],
+      lines(times_sim, extract_state_matrix(history[[i - 1L]])[, n_var],
             col = rgb(0, 0, 1, 0.15), lwd = 1)
       dev.off()
       ghost_img <- image_composite(ghost_img, ghost_layer, operator = "over")
@@ -175,7 +192,8 @@ generate_optimization_gif <- function(solver, trace_results, y0,
     cur_layer <- image_graph(width = W, height = H, res = 96,
                              bg = "transparent")
     overlay_plot()
-    lines(times_sim, history[[i]][, n_var], col = "blue", lwd = 2)
+    lines(times_sim, extract_state_matrix(history[[i]])[, n_var],
+          col = "blue", lwd = 2)
     dev.off()
 
     frame <- image_composite(ghost_img, cur_layer, operator = "over")
@@ -186,9 +204,9 @@ generate_optimization_gif <- function(solver, trace_results, y0,
   }
 
   # 3. Final convergence frames (red), reusing the last ghost_img
-  final_y <- solver$solve_state(
+  final_y <- extract_state_matrix(solver$solve_state(
     matrix(trace_results$res$par, solver$n_steps, solver$n_vars), y0
-  )[, n_var]
+  ))[, n_var]
 
   final_layer <- image_graph(width = W, height = H, res = 96, bg = "transparent")
   overlay_plot()

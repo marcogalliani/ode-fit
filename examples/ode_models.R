@@ -212,7 +212,7 @@ ODE_CONFIGS <- list(
     params = list(alpha = 1.1, beta = 0.4, delta = 0.1, gamma = 0.4),
     y0 = c(x = 10, y = 10),
     times_obs = seq(0, 5, by = 0.5),
-    times_sim = seq(0, 5, by = 0.001),
+    times_sim = seq(0, 5, by = 0.1),
     active_params = c("alpha", "beta", "delta", "gamma"),
     uncertain_bounds = list(
       alpha = c(0.9, 1.3),
@@ -236,8 +236,8 @@ ODE_CONFIGS <- list(
       C0 = 1.0, R = 8.314, T_vec = c(400, 420, 440)
     ),
     y0 = c(x1 = 0.99, x2 = 0.99, x3 = 0.99),
-    times_obs = seq(0, 40, by = 0.5),
-    times_sim = seq(0, 40, by = 0.1),
+    times_obs = seq(0, 40, by = 1),
+    times_sim = seq(0, 40, by = 0.5),
     active_params = c("E", "m", "n"),
     uncertain_bounds = list(
       E = c(20000, 80000),

@@ -3,68 +3,22 @@ library(ggplot2)
 library(gridExtra)
 
 source("src/solvers/general_ode_system_solver.R")
+source("src/solvers/parameter_estimator_base.R")
 
 # =============================================================================
 # TrackingOdeSolver
 # =============================================================================
 TrackingOdeSolver <- R6Class("TrackingOdeSolver",
+  inherit = ParameterEstimatorBase,
   public = list(
-    inner_solver_class = NULL,
-    times_sim = NULL, obs_times = NULL, obs_values = NULL, y0 = NULL,
-    func_rhs = NULL, fixed_params = NULL, lambda = NULL,
-    param_scales = NULL,
-    inner_max_iter = NULL, inner_reltol = NULL,
-
-    # State cache
-    last_theta  = NULL,
-    last_solver = NULL,
-    last_u      = NULL,   # warm-start: optimal u from previous outer iteration
-
-    # Optimisation history: list of list(iter, params, cost)
-    history = NULL,
-
-    initialize = function(func_rhs, times_sim, obs_times, obs_values, y0,
-                          fixed_params, lambda, param_scales,
+    initialize = function(func_rhs, times_sim, obs_times, obs_values,
+                fixed_params, lambda, param_scales,
+                init_state,
                           inner_max_iter = 200,
                           inner_reltol   = sqrt(.Machine$double.eps)) {
-      self$func_rhs        <- func_rhs
-      self$times_sim       <- times_sim
-      self$obs_times       <- obs_times
-      self$obs_values      <- obs_values
-      self$y0              <- y0
-      self$fixed_params    <- fixed_params
-      self$lambda          <- lambda
-      self$inner_solver_class <- OdeSystemSolver
-      self$param_scales    <- param_scales
-      self$inner_max_iter  <- inner_max_iter
-      self$inner_reltol    <- inner_reltol
-      self$history         <- list()
-    },
-
-    # --- Helper: map normalised theta vector to physical params list -----------
-    get_physical_params = function(theta_norm, param_names) {
-      curr <- self$fixed_params
-      for (i in seq_along(param_names)) {
-        name       <- param_names[i]
-        curr[[name]] <- theta_norm[i] * self$param_scales[[name]]
-      }
-      return(curr)
-    },
-
-    # --- Numerical Jacobian of f w.r.t. physical parameters (nv x np) --------
-    # Central-difference scheme; same convention as CascadingOdeSolver.
-    get_param_jacobian = function(y, t, p_phys, param_names) {
-      nv  <- length(y)
-      np  <- length(param_names)
-      eps <- 1e-7
-      J   <- matrix(0, nv, np)
-      for (j in seq_len(np)) {
-        dth <- eps * max(abs(p_phys[[param_names[j]]]), 1)
-        p_p <- p_phys; p_p[[param_names[j]]] <- p_phys[[param_names[j]]] + dth
-        p_m <- p_phys; p_m[[param_names[j]]] <- p_phys[[param_names[j]]] - dth
-        J[, j] <- (self$func_rhs(y, t, p_p) - self$func_rhs(y, t, p_m)) / (2 * dth)
-      }
-      return(J)
+      self$initialize_estimator(func_rhs, times_sim, obs_times, obs_values,
+                                fixed_params, lambda, param_scales,
+                                init_state, inner_max_iter, inner_reltol)
     },
 
     # =========================================================================
@@ -77,7 +31,8 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
         solver <- self$last_solver
       } else {
         # --- Run inner optimisation ---
-        p_phys <- self$get_physical_params(theta_norm, param_names)
+        p_phys <- self$unpack_physical(theta_norm, param_names)
+        y0_phys <- self$eval_init_state(p_phys)
         solver <- self$inner_solver_class$new(
           func_rhs   = self$func_rhs,
           times_sim  = self$times_sim,
@@ -86,7 +41,7 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
           params     = p_phys,
           lambda     = self$lambda
         )
-        solver$optimize(y0       = self$y0,
+        solver$optimize(y0       = y0_phys,
                         u_init   = NULL,
                         max_iter = self$inner_max_iter,
                         reltol   = self$inner_reltol)
@@ -98,7 +53,7 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
         # Record outer iteration (use actual y0 after NA processing)
         y0_eff <- solver$y[1L, ]
         j_val  <- solver$cost_function(as.vector(solver$u), y0_eff)
-        p_vals <- theta_norm * unlist(self$param_scales[param_names])
+        p_vals <- theta_norm * self$get_scales_vector(param_names)
         self$history[[length(self$history) + 1L]] <- list(
           iter   = length(self$history) + 1L,
           params = setNames(p_vals, param_names),
@@ -112,7 +67,7 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
       y0_eff <- solver$y[1L, ]
       j_val  <- solver$cost_function(as.vector(solver$u), y0_eff)
 
-      p_vals <- theta_norm * unlist(self$param_scales[param_names])
+      p_vals <- theta_norm * self$get_scales_vector(param_names)
       cat(sprintf("Iter | Params: %s | J: %.4f\n",
                   paste(round(p_vals, 2), collapse = ","), j_val))
       return(j_val)
@@ -133,54 +88,56 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
         self$outer_objective(theta_norm, param_names)
 
       s      <- self$last_solver
-      p_phys <- self$get_physical_params(theta_norm, param_names)
       ns     <- s$n_steps
       np     <- length(param_names)
-
       grad_phys <- numeric(np)
+      p_phys <- self$unpack_physical(theta_norm, param_names)
+      J0 <- self$init_state_jacobian_fd(p_phys, param_names)
+      grad_phys <- grad_phys + as.vector(t(J0) %*% s$p[1L, ])
+
       for (t in seq_len(ns - 1L)) {
         dt    <- s$dt_vec[t]
         Fth   <- self$get_param_jacobian(s$y[t, ], s$times_sim[t],
-                                         p_phys, param_names)  # nv x np
-        p_next <- s$p[t + 1L, ]                                # nv
-        # Contribution: p[t+1]^T * f_theta * dt  (np vector)
+                                         p_phys, param_names)
+        p_next <- s$p[t + 1L, ]
         grad_phys <- grad_phys + as.vector(t(Fth) %*% p_next) * dt
       }
 
-      scales <- unlist(self$param_scales[param_names])
+      scales <- self$get_scales_vector(param_names)
       return(grad_phys * scales)
+    },
+
+    outer_gradient_dispatch = function(theta_norm, param_names, gradient_mode = "adjoint") {
+      mode <- match.arg(gradient_mode, c("adjoint", "sensitivity"))
+      if (mode == "adjoint") {
+        return(self$outer_gradient(theta_norm, param_names))
+      }
+      self$outer_gradient_sensitivity(theta_norm, param_names)
     },
 
     # =========================================================================
     # 3. Partial sensitivity matrix S[ns, nv, np]:
     #    S[t, v, j] = dy_{t,v} / d theta_j_physical  (u* held fixed)
-    #
-    # Pure forward sensitivity sweep:
-    #   S[t+1] = (I + dt*f_y[t]) * S[t]  +  dt * f_theta(y[t], t; theta)
-    #   S[0]   = 0
-    #
-    # 'Partial' because the envelope theorem treats u*(theta) as constant
-    # when differentiating H_T w.r.t. theta.  This is consistent with the
-    # outer gradient (outer_gradient / outer_gradient_sensitivity) but gives
-    # a lower bound on the true uncertainty in y* relative to the total
-    # sensitivity used by CascadingOdeSolver.
     # =========================================================================
     compute_sensitivity_matrix = function(theta_norm, param_names) {
       if (is.null(self$last_theta) || !all(theta_norm == self$last_theta))
         self$outer_objective(theta_norm, param_names)
 
       s      <- self$last_solver
-      p_phys <- self$get_physical_params(theta_norm, param_names)
+      p_phys <- self$unpack_physical(theta_norm, param_names)
       ns     <- s$n_steps
       nv     <- s$n_vars
       np     <- length(param_names)
 
       S <- array(0, c(ns, nv, np))
+      J0 <- self$init_state_jacobian_fd(p_phys, param_names)
+      S[1L, , ] <- J0
+
       for (t in seq_len(ns - 1L)) {
-        dt  <- s$dt_vec[t]
+        dt    <- s$dt_vec[t]
+        Fth   <- self$get_param_jacobian(s$y[t, ], s$times_sim[t],
+                                         p_phys, param_names)
         Fy  <- s$get_jacobian(s$y[t, ], s$times_sim[t])
-        Fth <- self$get_param_jacobian(s$y[t, ], s$times_sim[t],
-                                       p_phys, param_names)
         At  <- diag(nv) + dt * Fy
         for (j in seq_len(np)) {
           S[t + 1L, , j] <- At %*% S[t, , j] + dt * Fth[, j]
@@ -208,7 +165,7 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
                           function(j) sum((2 / ns) * resid * S[, , j]),
                           numeric(1L))
 
-      scales <- unlist(self$param_scales[param_names])
+      scales <- self$get_scales_vector(param_names)
       return(grad_phys * scales)
     },
 
@@ -216,38 +173,42 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
     # 4. Outer Parameter Optimisation  (L-BFGS-B)
     # =========================================================================
     optimize_parameters = function(init_theta_physical, param_names,
-                                   lower_phys = NULL, upper_phys = NULL) {
-      init_theta_norm <- init_theta_physical /
-        unlist(self$param_scales[param_names])
-
-      if (is.null(lower_phys)) {
-        lower_norm <- rep(1e-5, length(param_names))
-      } else {
-        lower_norm <- lower_phys / unlist(self$param_scales[param_names])
-      }
-
-      if (is.null(upper_phys)) {
-        upper_norm <- rep(Inf, length(param_names))
-      } else {
-        upper_norm <- upper_phys / unlist(self$param_scales[param_names])
-      }
+                                   lower_phys = NULL, upper_phys = NULL,
+                                   gradient_mode = c("adjoint", "sensitivity")) {
+      gradient_mode <- match.arg(gradient_mode)
+      prep <- self$prepare_theta_normalized(param_names,
+                                            init_theta_physical,
+                                            lower_phys,
+                                            upper_phys)
+      scales <- prep$scales
+      init_theta_norm <- prep$init
+      lower_norm <- prep$lower
+      upper_norm <- prep$upper
 
       self$history <- list()
 
       cat("=== Starting Constrained Parameter Tracking (L-BFGS-B) ===\n")
       cat("Initial Guess (Norm):", round(init_theta_norm, 4), "\n")
 
+      old_warn <- getOption("warn")
+      options(warn = 0)
+      on.exit(options(warn = old_warn), add = TRUE)
+
       res <- optim(
         par         = init_theta_norm,
-        fn          = self$outer_objective,
-        gr          = self$outer_gradient,
+        fn          = function(par, param_names) self$outer_objective(par, param_names),
+        gr          = function(par, param_names) {
+          self$outer_gradient_dispatch(par, param_names, gradient_mode = gradient_mode)
+        },
         param_names = param_names,
         method      = "L-BFGS-B",
         lower       = lower_norm,
-        control     = list(maxit = 50, trace = 1)
+        upper       = upper_norm,
+        control     = list(maxit = 30, trace = 1)
       )
 
-      final_params <- res$par * unlist(self$param_scales[param_names])
+      final_params <- res$par * scales
+      names(final_params) <- param_names
       cat("\n=== Optimization Complete ===\n")
       print(final_params)
       return(final_params)

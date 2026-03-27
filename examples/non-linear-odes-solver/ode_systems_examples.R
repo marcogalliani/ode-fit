@@ -125,7 +125,7 @@ run_missing_data_example <- function(lambda = 1) {
 run_discovery_example <- function(lambda = 0.01) {
   cat("\n=== OdeSystemSolver: dynamics-discovery example ===\n")
 
-  k          <- 6e-2
+  k          <- 5e-2
   simple_rhs <- function(y, t, p) -k * y^3
 
   times_sim <- seq(0.01, 10, by = 0.01)
@@ -135,43 +135,62 @@ run_discovery_example <- function(lambda = 0.01) {
   y_true[1] <- 10
   for (i in seq_len(n_steps - 1))
     y_true[i + 1] <- y_true[i] +
-      0.01 * (-k * y_true[i]^(1 / 3) + 0.2 * sin(times_sim[i]))
+      0.01 * (-k * y_true[i]^3 + 1.2 * sin(times_sim[i]))
+
 
   set.seed(123)
-  obs_data <- matrix(y_true + rnorm(n_steps, 0, 0.3), ncol = 1)
+  times_obs <- sort(sample(times_sim, 100))
+  obs_data <- numeric(length(times_obs))
+  for(i in seq_len(length(times_obs))){
+    t_curr <- times_obs[i]
+    obs_data[i] <- y_true[which(times_sim == t_curr)]
+  }
+  obs_data <- matrix(obs_data + rnorm(length(times_obs), 0, 0.3), ncol = 1)
 
   solver <- OdeSystemSolver$new(
     func_rhs   = simple_rhs,
     times_sim  = times_sim,
-    obs_times  = times_sim,
+    obs_times  = times_obs,
     obs_values = obs_data,
     params     = list(),
-    lambda     = lambda
+    lambda     = lambda,
+    method = "gl2"
   )
   solver$optimize(y0 = y_true[1], max_iter = 100)
 
-  df <- data.frame(
+  df_fit <- data.frame(
     time          = times_sim,
     true_y        = y_true,
     fitted_y      = solver$y[, 1],
-    hidden_force  = 0.2 * sin(times_sim),
+    hidden_force  = 1.2*sin(times_sim),
     recovered_u   = solver$u[, 1]
   )
-  p1 <- ggplot(df, aes(x = time)) +
-    geom_point(aes(y = true_y),  alpha = 0.3, size = 0.8) +
-    geom_line(aes(y = fitted_y), color = "red") +
+
+  df_obs <- data.frame(
+    time = times_obs,
+    obs_y = obs_data[,1]
+  )
+
+  p1 <- ggplot(mapping = aes(x = time)) +
+    geom_line(data = df_fit, aes(y = .data$true_y)) +
+    geom_line(data = df_fit, aes(y = .data$fitted_y), color = "red") +
+    geom_point(data = df_obs, aes(y = .data$obs_y),  alpha = 0.3, size = 0.8) +
     labs(title    = "State fit (red) vs truth (dots)",
          subtitle = "Solver uses u(t) to bridge the model-reality gap") +
     theme_minimal()
-  p2 <- ggplot(df, aes(x = time)) +
+  p2 <- ggplot(df_fit, aes(x = time)) +
     geom_line(aes(y = hidden_force), linetype = "dashed") +
     geom_line(aes(y = recovered_u),  color = "blue") +
     labs(title    = "Force recovery",
-         subtitle = "Dashed: 0.2*sin(t)  |  Blue: recovered u(t)",
+         subtitle = "Dashed: 0.6*sin(t)  |  Blue: recovered u(t)",
          y = "Force") +
     theme_minimal()
-  grid.arrange(p1, p2, ncol = 1)
+  grid.arrange(p1, p2, ncol = 2)
   invisible(solver)
+
+  # Visualise the optimisation
+  trace_results <- trace_optimization(solver, y0 = y_true[1], max_iter = 50)
+  generate_optimization_gif(solver,trace_results, y_true[1])
 }
 
 

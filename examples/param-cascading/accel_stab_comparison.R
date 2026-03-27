@@ -15,7 +15,7 @@ cascading_solver <- CascadingOdeSolver$new(
   obs_times    = df_clean$time,
   times_sim    = times_grid,
   obs_values   = obs_matrix,
-  y0           = y0,
+  init_state   = function(p) as.numeric(y0),
   fixed_params = fixed_params,
   lambda       = 1e-3,
   param_scales = param_scales

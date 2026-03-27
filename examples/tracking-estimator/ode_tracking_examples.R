@@ -66,7 +66,7 @@ run_example <- function(cfg,
     times_sim    = t_sim,
     obs_times    = t_obs,
     obs_values   = syn$obs_data,
-    y0           = y0,
+    init_state   = function(p) as.numeric(y0),
     fixed_params = cfg$fixed_params,
     lambda       = lambda,
     param_scales = cfg$param_scales

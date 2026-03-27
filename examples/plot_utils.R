@@ -11,18 +11,20 @@ library(reshape2)
 
 # State-fit plot: observed vs fitted for each variable.
 plot_state_fit <- function(y_fit, obs_data, t_obs, t_sim, var_names) {
-  sim_obs_idx <- which(round(t_sim, 10) %in% round(t_obs, 10))
+  # check assumption
+  stopifnot(nrow(y_fit) == length(t_sim))
+  stopifnot(nrow(obs_data) == length(t_obs))
+  stopifnot(ncol(y_fit) == length(var_names))
+  stopifnot(ncol(obs_data) == length(var_names))
   n_vars <- length(var_names)
 
   ps <- lapply(seq_len(n_vars), function(i) {
-    ggplot(
-      data.frame(t   = t_obs,
-                 obs = obs_data[, i],
-                 fit = y_fit[sim_obs_idx, i]),
-      aes(x = t)
-    ) +
-      geom_point(aes(y = obs), alpha = 0.5, size = 1) +
-      geom_line(aes(y = fit), color = "steelblue", linewidth = 1) +
+    df_fit <- data.frame(t = t_sim, fit = y_fit[, i])
+    df_obs <- data.frame(t = t_obs, obs = obs_data[, i])
+
+    ggplot(mapping = aes(x = t)) +
+      geom_point(data = df_obs, aes(y = .data$obs), alpha = 0.5, size = 1) +
+      geom_line(data = df_fit, aes(y = .data$fit), color = "steelblue", linewidth = 1) +
       labs(title = var_names[i], x = "Time", y = "State") +
       theme_minimal()
   })
