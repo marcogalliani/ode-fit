@@ -19,7 +19,7 @@
 # =============================================================================
 
 source("tests/test_helpers.R")
-source("src/solvers/ode_solvers.R")
+source("src/solvers/numerical-solvers/load_numerical_solvers.R")
 
 # ---------------------------------------------------------------------------
 # Shared setup: scalar exponential decay, exact solution exp(-t)

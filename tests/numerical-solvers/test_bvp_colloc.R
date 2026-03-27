@@ -5,8 +5,7 @@
 # =============================================================================
 
 source("tests/test_helpers.R")
-source("src/solvers/bvp_solver.R")
-source("src/solvers/general_ode_system_solver.R")
+source("src/solvers/forward-solvers/load_forward_solvers.R")
 
 
 # =============================================================================

@@ -5,7 +5,7 @@ library(magrittr)
 library(dplyr)
 library(tidyr)
 
-source("src/solvers/parameter_cascading.R")
+source("src/solvers/inverse-solvers/load_inverse_solvers.R")
 source("examples/ode_models.R")
  
 # data

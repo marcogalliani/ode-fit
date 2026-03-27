@@ -24,7 +24,7 @@
 # =============================================================================
 
 source("tests/test_helpers.R")
-source("src/solvers/parameter_cascading.R")   # also sources general_ode_system_solver.R
+source("src/solvers/inverse-solvers/load_inverse_solvers.R")
 
 # ---------------------------------------------------------------------------
 # Shared physics

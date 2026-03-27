@@ -1,4 +1,4 @@
-source("src/solvers/general_ode_system_solver.R")
+source("src/solvers/forward-solvers/load_forward_solvers.R")
 source("src/utils/trace_optimisation.R")
 source("examples/accel_stab_data.R")
 

@@ -5,8 +5,6 @@ library(tidyr)
 library(reshape2)
 library(gridExtra)
 
-source("src/solvers/bvp_solver.R")
-source("src/solvers/ode_solvers.R")
 
 
 # =============================================================================

@@ -26,8 +26,6 @@
 
 library(R6)
 
-source("src/solvers/ode_solvers.R")
-
 SqpOcpSolver <- R6Class("SqpOcpSolver",
 
   private = list(

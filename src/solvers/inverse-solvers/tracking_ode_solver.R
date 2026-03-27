@@ -2,8 +2,6 @@ library(R6)
 library(ggplot2)
 library(gridExtra)
 
-source("src/solvers/general_ode_system_solver.R")
-source("src/solvers/parameter_estimator_base.R")
 
 # =============================================================================
 # TrackingOdeSolver
@@ -204,7 +202,7 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
         method      = "L-BFGS-B",
         lower       = lower_norm,
         upper       = upper_norm,
-        control     = list(maxit = 30, trace = 1)
+        control     = list(maxit = 30, factr = 1e12, trace = 1)
       )
 
       final_params <- res$par * scales

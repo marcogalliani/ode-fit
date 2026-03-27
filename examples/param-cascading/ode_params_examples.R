@@ -2,7 +2,7 @@ library(ggplot2)
 library(gridExtra)
 library(reshape2)
 
-source("src/solvers/parameter_cascading.R")
+source("src/solvers/inverse-solvers/load_inverse_solvers.R")
 source("src/utils/trace_optimisation.R")
 source("examples/ode_models.R")
 source("examples/plot_utils.R")

@@ -1,4 +1,4 @@
-source("src/solvers/parameter_cascading.R")
+source("src/solvers/inverse-solvers/load_inverse_solvers.R")
 source("examples/accel_stab_data.R")
 
 # --- Parameters and grid ----------------------------------------------------

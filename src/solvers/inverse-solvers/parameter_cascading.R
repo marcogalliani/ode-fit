@@ -2,8 +2,6 @@ library(R6)
 library(ggplot2)
 library(gridExtra)
 
-source("src/solvers/general_ode_system_solver.R")
-source("src/solvers/parameter_estimator_base.R")
   
 # Parameter cascading solver
 CascadingOdeSolver <- R6Class("CascadingOdeSolver",

@@ -18,7 +18,7 @@
 # =============================================================================
 
 source("tests/test_helpers.R")
-source("src/solvers/general_ode_system_solver.R")
+source("src/solvers/forward-solvers/load_forward_solvers.R")
 
 # ---------------------------------------------------------------------------
 # Shared physics definitions
@@ -313,7 +313,6 @@ describe("T6: NA handling — observations with missing values", {
 #     Checks that the adjoint gradient is correct for a multi-variable system.
 #     Designed to FAIL before fixes, PASS afterwards.
 # ---------------------------------------------------------------------------
-source("src/solvers/general_ode_system_solver.R")
 describe("T7: Gradient consistency — 2-D Lotka-Volterra", {
 
   params    <- list(alpha = 1.1, beta = 0.4, delta = 0.1, gamma = 0.4)

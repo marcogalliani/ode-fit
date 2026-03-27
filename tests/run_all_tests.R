@@ -27,43 +27,43 @@ source("tests/test_helpers.R")
 # ---- Suite 1: OdeSystemSolver ----
 cat("\n### OdeSystemSolver ###\n")
 local({
-  source("tests/test_general_ode_solver.R", local = TRUE)
+  source("tests/forward-solvers/test_general_ode_solver.R", local = TRUE)
 })
 
 # ---- Suite 2: CascadingOdeSolver ----
 cat("\n### CascadingOdeSolver ###\n")
 local({
-  source("tests/test_cascading_ode_solver.R", local = TRUE)
+  source("tests/inverse-solvers/test_cascading_ode_solver.R", local = TRUE)
 })
 
 # ---- Suite 3: TrackingOdeSolver ----
 cat("\n### TrackingOdeSolver ###\n")
 local({
-  source("tests/test_tracking_ode_solver.R", local = TRUE)
+  source("tests/inverse-solvers/test_tracking_ode_solver.R", local = TRUE)
 })
 
 # ---- Suite 4: ODE integrator accuracy ----
 cat("\n### ODE integrator accuracy ###\n")
 local({
-  source("tests/test_ode_accuracy.R", local = TRUE)
+  source("tests/numerical-solvers/test_ode_accuracy.R", local = TRUE)
 })
 
 # ---- Suite 5: BVP Solver (linear Riccati) ----
 cat("\n### BVP Solver (Riccati) ###\n")
 local({
-  source("tests/test_bvp_solver.R", local = TRUE)
+  source("tests/numerical-solvers/test_bvp_solver.R", local = TRUE)
 })
 
-# ---- Suite 5: BVP Collocation solver ----
+# ---- Suite 6: BVP Collocation solver ----
 cat("\n### BVP Collocation + optimize_bvp ###\n")
 local({
-  source("tests/test_bvp_colloc.R", local = TRUE)
+  source("tests/numerical-solvers/test_bvp_colloc.R", local = TRUE)
 })
 
 # ---- Suite 7: SQP OCP Solver ----
 cat("\n### SQP OCP Solver ###\n")
 local({
-  source("tests/test_sqp_ocp_solver.R", local = TRUE)
+  source("tests/forward-solvers/test_sqp_ocp_solver.R", local = TRUE)
 })
 
 # ---- Combined summary ----
