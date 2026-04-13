@@ -102,7 +102,7 @@ NumDeriv <- R6Class("NumDeriv",
 )
 
 #### 3. Inner Solver (Integral Form with Smoothed Data) ----
-OdeSystemSolver <- R6Class("OdeSystemSolver",
+DtOForwardSolver <- R6Class("DtOForwardSolver",
   public = list(
     func_rhs = NULL, params = NULL, lambda = NULL,
     times_sim = NULL, n_steps = NULL, dt_vec = NULL, n_vars = NULL,
@@ -366,7 +366,7 @@ run_exact_tracking <- function() {
   smoother <- DataSmoother$new(obs_times, obs_data)
 
   # 3. Setup Inner Solver with Smoother
-  inner <- OdeSystemSolver$new(lotka_volterra, times_sim, smoother)
+  inner <- DtOForwardSolver$new(lotka_volterra, times_sim, smoother)
 
   # Note: Lambda must be tuned to balance the Integral cost
   inner$lambda <- 5e-2
@@ -512,7 +512,7 @@ check_gradient_correctness <- function() {
   times <- seq(0, 2, by = 0.05) # Short horizon for speed
   obs_data <- matrix(10 + rnorm(2 * length(times)), ncol = 2)
   smoother <- DataSmoother$new(times, obs_data)
-  inner <- OdeSystemSolver$new(lotka_volterra, times, smoother)
+  inner <- DtOForwardSolver$new(lotka_volterra, times, smoother)
   inner$lambda <- 1.0
   inner$params <- c(1, 1, 1, 1)
 
@@ -576,7 +576,7 @@ setup_problem <- function() {
   smoother <- DataSmoother$new(times, obs_data)
 
   # Solver
-  inner <- OdeSystemSolver$new(lotka_volterra, times, smoother)
+  inner <- DtOForwardSolver$new(lotka_volterra, times, smoother)
   inner$lambda <- 1e1
 
   return(list(inner = inner, true_params = true_params))

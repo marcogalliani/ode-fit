@@ -10,13 +10,15 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
   inherit = ParameterEstimatorBase,
   public = list(
     initialize = function(func_rhs, times_sim, obs_times, obs_values,
-                fixed_params, lambda, param_scales,
-                init_state,
+                          fixed_params, lambda, param_scales,
+                          init_state,
                           inner_max_iter = 200,
-                          inner_reltol   = sqrt(.Machine$double.eps)) {
+                          inner_reltol   = sqrt(.Machine$double.eps),
+                          inner_method   = "euler") {
       self$initialize_estimator(func_rhs, times_sim, obs_times, obs_values,
                                 fixed_params, lambda, param_scales,
-                                init_state, inner_max_iter, inner_reltol)
+                                init_state, inner_max_iter, inner_reltol,
+                                inner_method)
     },
 
     # =========================================================================
@@ -37,7 +39,8 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
           obs_times  = self$obs_times,
           obs_values = self$obs_values,
           params     = p_phys,
-          lambda     = self$lambda
+          lambda     = self$lambda,
+          method     = self$inner_method
         )
         solver$optimize(y0       = y0_phys,
                         u_init   = NULL,
@@ -86,6 +89,10 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
         self$outer_objective(theta_norm, param_names)
 
       s      <- self$last_solver
+      if (is.null(s) || is.null(s$y) || is.null(s$p) ||
+          !all(is.finite(s$y)) || !all(is.finite(s$p))) {
+        return(rep(0, length(param_names)))
+      }
       ns     <- s$n_steps
       np     <- length(param_names)
       grad_phys <- numeric(np)
@@ -152,6 +159,9 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
         self$outer_objective(theta_norm, param_names)
 
       s     <- self$last_solver
+      if (is.null(s) || is.null(s$y) || !all(is.finite(s$y))) {
+        return(rep(0, length(param_names)))
+      }
       ns    <- s$n_steps
       np    <- length(param_names)
       resid <- ifelse(is.na(s$observations_mapped), 0,

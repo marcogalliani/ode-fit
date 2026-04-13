@@ -8,7 +8,7 @@ library(gridExtra)
 
 
 # =============================================================================
-# OdeSystemSolver
+# DtOForwardSolver
 #
 # Physics-informed smoother estimating unknown additive forcing u(t).
 #
@@ -20,7 +20,7 @@ library(gridExtra)
 # The corresponding DtOSolver (from ode_solvers.R) wraps a DtO scheme that
 # provides both the forward integrator and its consistent discrete adjoint.
 # =============================================================================
-OdeSystemSolver <- R6Class("OdeSystemSolver",
+DtOForwardSolver <- R6Class("DtOForwardSolver",
 
   private = list(
     dto_solver         = NULL,
@@ -110,7 +110,13 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
       u_mat <- matrix(u_flat, ns, nv)
 
       sol <- self$solve_state_adjoint(u_mat, y0)
-      if (!sol$converged || !all(is.finite(sol$y))) return(1e20)
+      if (!sol$converged || !all(is.finite(sol$y))) {
+        private$cache_u            <- u_flat
+        private$cache_y            <- sol$y
+        private$cache_p            <- sol$p
+        private$cache_grad_contrib <- rep(0, length(u_flat))
+        return(1e20)
+      }
 
       private$cache_u            <- u_flat
       private$cache_y            <- sol$y
@@ -126,6 +132,7 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
 
     gradient_function = function(u_flat, y0) {
       ns <- self$n_steps; nv <- self$n_vars
+      grad_len <- length(u_flat)
 
       cache_valid <- !is.null(private$cache_u) &&
                      length(private$cache_u) == length(u_flat) &&
@@ -138,6 +145,10 @@ OdeSystemSolver <- R6Class("OdeSystemSolver",
         private$cache_y            <- sol$y
         private$cache_p            <- sol$p
         private$cache_grad_contrib <- sol$grad_contrib
+      }
+
+      if (is.null(private$cache_grad_contrib) || length(private$cache_grad_contrib) != grad_len) {
+        private$cache_grad_contrib <- rep(0, grad_len)
       }
 
       u_mat  <- matrix(u_flat, ns, nv)

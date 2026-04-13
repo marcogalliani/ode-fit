@@ -8,12 +8,15 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
   inherit = ParameterEstimatorBase,
   public = list(
     initialize = function(func_rhs, times_sim, obs_times, obs_values,
-                fixed_params, lambda, param_scales,
-                init_state,
-                          inner_max_iter = 200, inner_reltol = sqrt(.Machine$double.eps)) {
+                          fixed_params, lambda, param_scales,
+                          init_state,
+                          inner_max_iter = 200,
+                          inner_reltol = sqrt(.Machine$double.eps),
+                          inner_method = "euler") {
       self$initialize_estimator(func_rhs, times_sim, obs_times, obs_values,
                                 fixed_params, lambda, param_scales,
-                                init_state, inner_max_iter, inner_reltol)
+                                init_state, inner_max_iter, inner_reltol,
+                                inner_method)
     },
     
     # 1. Outer Objective
@@ -27,7 +30,7 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
         solver <- self$inner_solver_class$new(
           func_rhs = self$func_rhs, times_sim = self$times_sim,
           obs_times = self$obs_times, obs_values = self$obs_values,
-          params = p_phys, lambda = self$lambda
+          params = p_phys, lambda = self$lambda, method = self$inner_method
         )
         
         solver$optimize(y0 = y0_phys, u_init = NULL, #self$last_u,

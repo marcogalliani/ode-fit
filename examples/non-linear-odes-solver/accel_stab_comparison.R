@@ -11,7 +11,7 @@ y0 <- rep(params$C0, times = ncol(obs_matrix))
 times_grid <- as_times_grid(dt = 0.001)
 
 # --- Inner solver -----------------------------------------------------------
-solver <- OdeSystemSolver$new(
+solver <- DtOForwardSolver$new(
   func_rhs  = sb_kref_rhs,
   times_sim = times_grid,
   obs_times = df_clean$time,

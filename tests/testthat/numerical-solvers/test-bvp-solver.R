@@ -1,8 +1,8 @@
 # =============================================================================
-# tests/test_bvp_solver.R
+# Tests for solve_linear_bvp_riccati and gradient consistency.
 # =============================================================================
 
-source("tests/test_helpers.R")
+setwd("../../..")
 source("src/solvers/forward-solvers/load_forward_solvers.R")
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -29,7 +29,6 @@ bvp_max_residuals <- function(sol, ns, ny, nrhs,
     }
   }
 
-  # Terminal BC residual
   Y_T <- matrix(Y[ns, , ], ny, nrhs)
   P_T <- matrix(P[ns, , ], ny, nrhs)
   res_T <- max(abs(P_T - E_T %*% Y_T - f_T))
@@ -39,9 +38,9 @@ bvp_max_residuals <- function(sol, ns, ny, nrhs,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-cat("=== BV1: solve_linear_bvp_riccati — scalar, 2 RHS ===\n")
+# BV1: solve_linear_bvp_riccati — scalar, 2 RHS
 # ─────────────────────────────────────────────────────────────────────────────
-describe("BV1", {
+describe("BV1: solve_linear_bvp_riccati — scalar, 2 RHS", {
   set.seed(42)
   ns <- 20L; ny <- 1L; nrhs <- 2L
   dt <- 0.05; lambda <- 0.5
@@ -64,18 +63,25 @@ describe("BV1", {
   res <- bvp_max_residuals(sol, ns, ny, nrhs,
            A_list, C_list, b_list, D_list, E_list, f_list, E_T, f_T)
 
-  test_that("forward residual < 1e-12", expect_less_than(res$forward,  1e-12))
-  test_that("backward residual < 1e-12", expect_less_than(res$backward, 1e-12))
-  test_that("terminal BC residual < 1e-12", expect_less_than(res$terminal, 1e-12))
-  test_that("initial condition satisfied",
-    expect_less_than(max(abs(sol$Y[1L, , ] - y0_mat)), 1e-12))
+  test_that("forward residual < 1e-12", {
+    expect_lt(res$forward, 1e-12)
+  })
+  test_that("backward residual < 1e-12", {
+    expect_lt(res$backward, 1e-12)
+  })
+  test_that("terminal BC residual < 1e-12", {
+    expect_lt(res$terminal, 1e-12)
+  })
+  test_that("initial condition satisfied", {
+    expect_lt(max(abs(sol$Y[1L, , ] - y0_mat)), 1e-12)
+  })
 })
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-cat("=== BV2: solve_linear_bvp_riccati — ny=2, nrhs=1 ===\n")
+# BV2: solve_linear_bvp_riccati — ny=2, nrhs=1
 # ─────────────────────────────────────────────────────────────────────────────
-describe("BV2", {
+describe("BV2: solve_linear_bvp_riccati — ny=2, nrhs=1", {
   set.seed(7)
   ns <- 15L; ny <- 2L; nrhs <- 1L
   dt <- 0.1; lambda <- 1.0; c_t <- dt^2 / (2 * lambda)
@@ -100,18 +106,22 @@ describe("BV2", {
   res <- bvp_max_residuals(sol, ns, ny, nrhs,
            A_list, C_list, b_list, D_list, E_list, f_list, E_T, f_T)
 
-  test_that("forward residual < 1e-12", expect_less_than(res$forward,  1e-12))
-  test_that("backward residual < 1e-12", expect_less_than(res$backward, 1e-12))
-  test_that("terminal BC residual < 1e-12", expect_less_than(res$terminal, 1e-12))
+  test_that("forward residual < 1e-12", {
+    expect_lt(res$forward, 1e-12)
+  })
+  test_that("backward residual < 1e-12", {
+    expect_lt(res$backward, 1e-12)
+  })
+  test_that("terminal BC residual < 1e-12", {
+    expect_lt(res$terminal, 1e-12)
+  })
 })
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-cat("=== BV3: gradient_function consistent with finite differences of cost_function ===\n")
+# BV3: gradient_function consistent with finite differences of cost_function
 # ─────────────────────────────────────────────────────────────────────────────
-# gradient_function must be the exact gradient of cost_function (CN
-# discretisation + exact discrete adjoint).  Verified via central FD.
-describe("BV3", {
+describe("BV3: gradient_function consistent with FD of cost_function", {
   k <- 0.5
   f_lin <- function(y, t, p) -p$k * y
 
@@ -120,7 +130,7 @@ describe("BV3", {
   obs_v  <- matrix(exp(-k * times) + rnorm(length(times), sd = 0.05), ncol = 1)
   lambda <- 0.3
 
-  solver <- OdeSystemSolver$new(
+  solver <- DtOForwardSolver$new(
     func_rhs = f_lin, times_sim = times,
     obs_times = times, obs_values = obs_v,
     params = list(k = k), lambda = lambda
@@ -137,12 +147,10 @@ describe("BV3", {
     y0  = 1.0
   )
 
-  test_that("max relative FD error < 1e-3 (CN adjoint matches finite differences)",
-    expect_less_than(chk$max_rel_error, 1e-3,
-      sprintf("max rel error = %.4e, cosine sim = %.6f",
-              chk$max_rel_error, chk$cosine_similarity)))
-
-  test_that("cosine similarity > 0.9999",
-    expect_greater_than(chk$cosine_similarity, 0.9999,
-      sprintf("cosine sim = %.6f", chk$cosine_similarity)))
+  test_that("max relative FD error < 1e-3 (CN adjoint matches finite differences)", {
+    expect_lt(chk$max_rel_error, 1e-3)
+  })
+  test_that("cosine similarity > 0.9999", {
+    expect_gt(chk$cosine_similarity, 0.9999)
+  })
 })

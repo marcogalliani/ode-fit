@@ -16,7 +16,7 @@
 #
 # where  y  is a numeric vector (state),  t  is a scalar (time), and
 # p  is a named list of parameters.  This signature is directly compatible
-# with OdeSystemSolver and CascadingOdeSolver.
+# with DtOForwardSolver and CascadingOdeSolver.
 #
 # DESOLVE WRAPPER
 # ---------------
@@ -122,7 +122,7 @@ sb_kref_rhs <- function(y, t, p) {
 
 
 # === Forward Euler integrator ===
-# Consistent with OdeSystemSolver / CascadingOdeSolver.  Used to generate
+# Consistent with DtOForwardSolver / CascadingOdeSolver.  Used to generate
 # synthetic ground-truth data in examples.
 euler_solve <- function(y0, times, rhs, params) {
   n <- length(times)

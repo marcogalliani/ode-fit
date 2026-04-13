@@ -1,5 +1,4 @@
 # =============================================================================
-# src/solvers/fem_ode_solver.R  —  EXPERIMENTAL
 #
 # Space-time Galerkin (DG-in-time) ODE solver.
 #
@@ -82,9 +81,9 @@ assemble_global_K_cn <- function(y_fwd, times, dt_vec, jac_fn) {
 
 
 # =============================================================================
-# FemOdeSolver
+# FEMForwardSolver
 # =============================================================================
-FemOdeSolver <- R6Class("FemOdeSolver",
+FEMForwardSolver <- R6Class("FEMForwardSolver",
 
   private = list(
     fwd_y         = NULL,   # ns×nv trajectory

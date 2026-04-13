@@ -11,7 +11,7 @@ source("examples/sensitivity-analysis/sensitivity_utils.R")
 
 
 # =============================================================================
-# run_example -- canonical OdeSystemSolver workflow
+# run_example -- canonical DtOForwardSolver workflow
 #
 # Arguments
 # ---------
@@ -22,7 +22,7 @@ source("examples/sensitivity-analysis/sensitivity_utils.R")
 # max_iter   Max L-BFGS-B iterations for the u(t) optimisation.
 # seed       Random seed for reproducible data generation.
 #
-# Returns the fitted OdeSystemSolver object invisibly.
+# Returns the fitted DtOForwardSolver object invisibly.
 # =============================================================================
 run_example <- function(cfg,
                         lambda    = 1e5,
@@ -41,8 +41,8 @@ run_example <- function(cfg,
                                  noise_pct = 0.05, seed = seed)
 
   # 2. Solver
-  cat("\n=== OdeSystemSolver  lambda =", lambda, "===\n")
-  solver <- OdeSystemSolver$new(
+  cat("\n=== DtOForwardSolver  lambda =", lambda, "===\n")
+  solver <- DtOForwardSolver$new(
     func_rhs   = cfg$rhs,
     obs_times  = t_obs,
     times_sim  = t_sim,
@@ -70,7 +70,7 @@ run_example <- function(cfg,
 # =============================================================================
 
 run_missing_data_example <- function(lambda = 1) {
-  cat("\n=== OdeSystemSolver: missing-data (Lotka-Volterra) ===\n")
+  cat("\n=== DtOForwardSolver: missing-data (Lotka-Volterra) ===\n")
 
   params    <- ODE_CONFIGS$lv$params
   y0        <- c(10, 10)
@@ -88,7 +88,7 @@ run_missing_data_example <- function(lambda = 1) {
   cat(sprintf("  Introduced %d NAs (predator, t in [10, 25]).\n",
               length(gap_idx)))
 
-  solver <- OdeSystemSolver$new(
+  solver <- DtOForwardSolver$new(
     func_rhs   = lv_rhs,
     times_sim  = times_sim,
     obs_times  = times_obs,
@@ -123,7 +123,7 @@ run_missing_data_example <- function(lambda = 1) {
 
 
 run_discovery_example <- function(lambda = 0.01) {
-  cat("\n=== OdeSystemSolver: dynamics-discovery example ===\n")
+  cat("\n=== DtOForwardSolver: dynamics-discovery example ===\n")
 
   k          <- 5e-2
   simple_rhs <- function(y, t, p) -k * y^3
@@ -147,7 +147,7 @@ run_discovery_example <- function(lambda = 0.01) {
   }
   obs_data <- matrix(obs_data + rnorm(length(times_obs), 0, 0.3), ncol = 1)
 
-  solver <- OdeSystemSolver$new(
+  solver <- DtOForwardSolver$new(
     func_rhs   = simple_rhs,
     times_sim  = times_sim,
     obs_times  = times_obs,
@@ -195,7 +195,7 @@ run_discovery_example <- function(lambda = 0.01) {
 
 
 run_sse_surface_example <- function() {
-  cat("\n=== OdeSystemSolver: SSE surface (Lotka-Volterra) ===\n")
+  cat("\n=== DtOForwardSolver: SSE surface (Lotka-Volterra) ===\n")
 
   params    <- ODE_CONFIGS$lv$params
   y0        <- c(10, 10)
@@ -208,7 +208,7 @@ run_sse_surface_example <- function() {
   obs_data <- obs_data +
     matrix(rnorm(length(obs_data), 0, 1.5), nrow(obs_data), 2)
 
-  solver <- OdeSystemSolver$new(
+  solver <- DtOForwardSolver$new(
     func_rhs   = lv_rhs,
     obs_times  = times_obs,
     times_sim  = times_sim,

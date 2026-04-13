@@ -8,7 +8,7 @@ ParameterEstimatorBase <- R6Class("ParameterEstimatorBase",
     param_scales = NULL,
     init_state = NULL,
     n_vars = NULL,
-    inner_max_iter = NULL, inner_reltol = NULL,
+    inner_max_iter = NULL, inner_reltol = NULL, inner_method = NULL,
 
     last_theta = NULL,
     last_solver = NULL,
@@ -19,7 +19,8 @@ ParameterEstimatorBase <- R6Class("ParameterEstimatorBase",
                                     fixed_params, lambda, param_scales,
                                     init_state,
                                     inner_max_iter = 200,
-                                    inner_reltol = sqrt(.Machine$double.eps)) {
+                                    inner_reltol = sqrt(.Machine$double.eps),
+                                    inner_method = "euler") {
       self$func_rhs <- func_rhs
       self$times_sim <- times_sim
       self$obs_times <- obs_times
@@ -30,7 +31,8 @@ ParameterEstimatorBase <- R6Class("ParameterEstimatorBase",
       }
       self$fixed_params <- fixed_params
       self$lambda <- lambda
-      self$inner_solver_class <- OdeSystemSolver
+      self$inner_solver_class <- DtOForwardSolver
+      self$inner_method <- inner_method
       self$param_scales <- param_scales
       self$init_state <- init_state
       self$inner_max_iter <- inner_max_iter

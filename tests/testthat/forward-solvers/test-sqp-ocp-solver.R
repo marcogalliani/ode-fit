@@ -1,20 +1,15 @@
 # =============================================================================
-# tests/test_sqp_ocp_solver.R
-#
 # Tests for SqpOcpSolver (src/solvers/sqp_ocp_solver.R).
-#
-# HOW TO RUN (from repo root):
-#   source("tests/test_sqp_ocp_solver.R")
 #
 # WHAT IS TESTED:
 #   SQP1. 1-D decay — convergence and cost reduction
-#   SQP2. 1-D decay — trajectory agreement with BFGS (Euler)
+#   SQP2. 1-D decay — trajectory agreement with BFGS
 #   SQP3. 2-D Lotka-Volterra — convergence and BFGS agreement
-#   SQP4. State recovery — u* ≈ 0 when physics is exact
+#   SQP4. State recovery — u* ~ 0 when physics is exact
 #   SQP5. NA handling — missing observations
 # =============================================================================
 
-source("tests/test_helpers.R")
+setwd("../../..")
 source("src/solvers/forward-solvers/load_forward_solvers.R")
 
 # ---------------------------------------------------------------------------
@@ -55,7 +50,7 @@ describe("SQP1: 1-D decay — convergence and cost reduction", {
     params = params, lambda = 0.1, y0 = y0
   )
 
-  ref <- OdeSystemSolver$new(
+  ref <- DtOForwardSolver$new(
     func_rhs = .sqp_decay_rhs, times_sim = times_sim,
     obs_times = times_sim, obs_values = obs_data,
     params = params, lambda = 0.1, method = "euler"
@@ -66,13 +61,10 @@ describe("SQP1: 1-D decay — convergence and cost reduction", {
   cost_sqp <- sqp$cost_function()
 
   test_that("SQP converges (KKT norm < 1e-6)", {
-    expect_less_than(sol$kkt_norm, 1e-6,
-      sprintf("kkt_norm = %.3e, iter = %d", sol$kkt_norm, sol$iter))
+    expect_lt(sol$kkt_norm, 1e-6)
   })
-
   test_that("SQP cost < u=0 cost", {
-    expect_less_than(cost_sqp, cost_zero,
-      sprintf("sqp=%.6g, zero=%.6g", cost_sqp, cost_zero))
+    expect_lt(cost_sqp, cost_zero)
   })
 })
 
@@ -96,7 +88,7 @@ describe("SQP2: 1-D decay — SQP vs BFGS trajectory agreement", {
   )
   sqp$solve(max_iter = 50, tol = 1e-8)
 
-  ref <- OdeSystemSolver$new(
+  ref <- DtOForwardSolver$new(
     func_rhs = .sqp_decay_rhs, times_sim = times_sim,
     obs_times = times_sim, obs_values = obs_data,
     params = params, lambda = 0.1, method = "euler"
@@ -106,17 +98,15 @@ describe("SQP2: 1-D decay — SQP vs BFGS trajectory agreement", {
   rmse_y <- sqrt(mean((sqp$y - ref$y)^2))
 
   test_that("SQP and BFGS state trajectories agree (RMSE < 0.05)", {
-    expect_less_than(rmse_y, 0.05,
-      sprintf("RMSE(y) = %.4g", rmse_y))
+    expect_lt(rmse_y, 0.05)
   })
 
   cost_sqp  <- sqp$cost_function()
   cost_bfgs <- ref$cost_function(as.vector(ref$u), y0)
+  ratio     <- max(cost_sqp, cost_bfgs) / min(cost_sqp, cost_bfgs)
 
   test_that("SQP and BFGS costs agree within factor 2", {
-    ratio <- max(cost_sqp, cost_bfgs) / min(cost_sqp, cost_bfgs)
-    expect_less_than(ratio, 2,
-      sprintf("sqp=%.6g, bfgs=%.6g, ratio=%.3f", cost_sqp, cost_bfgs, ratio))
+    expect_lt(ratio, 2)
   })
 })
 
@@ -140,7 +130,7 @@ describe("SQP3: 2-D Lotka-Volterra — convergence and BFGS agreement", {
   )
   sol <- sqp$solve(max_iter = 50, tol = 1e-6)
 
-  ref <- OdeSystemSolver$new(
+  ref <- DtOForwardSolver$new(
     func_rhs = .sqp_lv_rhs, times_sim = times_sim,
     obs_times = times_sim, obs_values = obs_data,
     params = params, lambda = 0.1, method = "euler"
@@ -149,31 +139,24 @@ describe("SQP3: 2-D Lotka-Volterra — convergence and BFGS agreement", {
   ref$optimize(y0 = y0, max_iter = 200)
 
   cost_sqp  <- sqp$cost_function()
-  cost_bfgs <- ref$cost_function(as.vector(ref$u), y0)
-
-  test_that("2-D LV: SQP converges (KKT norm < 1e-4)", {
-    expect_less_than(sol$kkt_norm, 1e-4,
-      sprintf("kkt_norm = %.3e", sol$kkt_norm))
-  })
-
-  test_that("2-D LV: SQP cost < u=0 cost", {
-    expect_less_than(cost_sqp, cost_zero,
-      sprintf("sqp=%.6g, zero=%.6g", cost_sqp, cost_zero))
-  })
-
-  rmse_y      <- sqrt(mean((sqp$y - ref$y)^2))
+  rmse_y    <- sqrt(mean((sqp$y - ref$y)^2))
   state_range <- diff(range(obs_data))
 
+  test_that("2-D LV: SQP converges (KKT norm < 1e-4)", {
+    expect_lt(sol$kkt_norm, 1e-4)
+  })
+  test_that("2-D LV: SQP cost < u=0 cost", {
+    expect_lt(cost_sqp, cost_zero)
+  })
   test_that("2-D LV: trajectories agree within 20% of state range", {
-    expect_less_than(rmse_y / state_range, 0.2,
-      sprintf("RMSE/range = %.4g", rmse_y / state_range))
+    expect_lt(rmse_y / state_range, 0.2)
   })
 })
 
 # ---------------------------------------------------------------------------
-# SQP4. State recovery — u* ≈ 0 when physics is exact
+# SQP4. State recovery — u* ~ 0 when physics is exact
 # ---------------------------------------------------------------------------
-describe("SQP4: state recovery — u* ≈ 0 with exact physics", {
+describe("SQP4: state recovery — u* ~ 0 with exact physics", {
 
   params    <- list(k = 0.4)
   times_sim <- seq(0, 3, by = 0.1)
@@ -191,13 +174,10 @@ describe("SQP4: state recovery — u* ≈ 0 with exact physics", {
   rmse_y <- sqrt(mean((sqp$y - y_true)^2))
 
   test_that("RMSE of u* is small (< 0.05)", {
-    expect_less_than(rmse_u, 0.05,
-      sprintf("RMSE(u) = %.4g", rmse_u))
+    expect_lt(rmse_u, 0.05)
   })
-
   test_that("RMSE of y vs truth is small (< 0.05)", {
-    expect_less_than(rmse_y, 0.05,
-      sprintf("RMSE(y) = %.4g", rmse_y))
+    expect_lt(rmse_y, 0.05)
   })
 })
 
@@ -222,14 +202,10 @@ describe("SQP5: NA handling — missing observations", {
   sol <- sqp$solve(max_iter = 50, tol = 1e-8)
 
   test_that("SQP converges with NA observations", {
-    expect_true(sol$converged, sprintf("kkt_norm = %.3e", sol$kkt_norm))
+    expect_true(sol$converged)
   })
-
   test_that("cost is finite and non-negative", {
     cost <- sqp$cost_function()
-    expect_true(is.finite(cost) && cost >= 0, sprintf("cost = %g", cost))
+    expect_true(is.finite(cost) && cost >= 0)
   })
 })
-
-# ---------------------------------------------------------------------------
-test_summary()

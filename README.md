@@ -54,7 +54,7 @@ $$
 \end{cases}
 $$
 
-The inner gradient is then fed into an appropriate optimisation algorithm to converge to the optimum. This optimisation scheme is implemented within `src/solvers/general_ode_system_solver.R`, more details on this solver will be provided later.
+The inner gradient is then fed into an appropriate optimisation algorithm to converge to the optimum. This optimisation scheme is implemented within `src/solvers/dto_fwd_solver.R`, more details on this solver will be provided later.
 
 On the other hand, the outer gradient is computed relying on the implicit function theorem. To see why, consider gradient of the outer error criterion expanded thorugh the chain rule
 
@@ -75,7 +75,7 @@ $$
 
 
 ### Tracking estimator
-The tracking estimator is based on the works of [(Brunel and Clairon, 2015)](https://doi.org/10.48550/arXiv.1410.7554), [(Clairon and Brunel,2018)](https://doi.org/10.1080/01621459.2017.1319841) and here implemented in a modified version in `src/solvers/tracking_ode_solver.R`. The approach is quite similar to parameter cascading. Actually, it can be considered as a parameter cascading having the same optimisation criterion $J(u,\theta)$ both for the inner and the outer problem, namely $H(\theta)=\min_{u}J(u,\theta)$. For this reason, the solution of the inner problem is delegated to the same solver (`src/solvers/general_ode_system_solver.R`) used by parameter cascading. 
+The tracking estimator is based on the works of [(Brunel and Clairon, 2015)](https://doi.org/10.48550/arXiv.1410.7554), [(Clairon and Brunel,2018)](https://doi.org/10.1080/01621459.2017.1319841) and here implemented in a modified version in `src/solvers/tracking_ode_solver.R`. The approach is quite similar to parameter cascading. Actually, it can be considered as a parameter cascading having the same optimisation criterion $J(u,\theta)$ both for the inner and the outer problem, namely $H(\theta)=\min_{u}J(u,\theta)$. For this reason, the solution of the inner problem is delegated to the same solver (`src/solvers/dto_fwd_solver.R`) used by parameter cascading. 
 
 The slight modification made to the outer optimisation cost allows for simplified gradient computation and a nice interpretation of the optimisation procedure. Let's start by looking at the gradient: 
 
