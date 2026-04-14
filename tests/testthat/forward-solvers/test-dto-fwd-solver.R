@@ -421,3 +421,72 @@ describe("T13: optimize vs optimize_bvp — 2-D LV, cost reduction and trajector
     expect_lt(rmse_traj / state_range, 0.2)
   })
 })
+
+# ---------------------------------------------------------------------------
+# T14. Discrete control linearization API
+# ---------------------------------------------------------------------------
+describe("T14: get_discrete_control_linearization API across methods", {
+
+  params    <- list(k = 0.4)
+  times_sim <- seq(0, 1, by = 0.1)
+  y0        <- 1.0
+  y_obs     <- matrix(y0 * exp(-params$k * times_sim), ncol = 1)
+
+  for (method in c("euler", "cn", "gl1", "gl2")) {
+    local({
+      m <- method
+
+      solver <- DtOForwardSolver$new(
+        func_rhs   = decay_rhs,
+        times_sim  = times_sim,
+        obs_times  = times_sim,
+        obs_values = y_obs,
+        params     = params,
+        lambda     = 0.1,
+        method     = m
+      )
+
+      u0 <- matrix(0, solver$n_steps, solver$n_vars)
+      solver$solve_state(u0, y0)
+
+      test_that(sprintf("%s: linearization has expected structure", m), {
+        dU <- solver$get_discrete_control_linearization(
+          t_idx = 1L,
+          param_names = c("k"),
+          include_theta = TRUE
+        )
+
+        expect_true(is.list(dU))
+        expect_true(all(c("Du_dyc", "Du_dyn", "Du_dtheta") %in% names(dU)))
+
+        expect_equal(dim(dU$Du_dyc), c(1L, 1L))
+        expect_equal(dim(dU$Du_dyn), c(1L, 1L))
+        expect_equal(dim(dU$Du_dtheta), c(1L, 1L))
+
+        expect_true(all(is.finite(dU$Du_dyc)))
+        expect_true(all(is.finite(dU$Du_dyn)))
+        expect_true(all(is.finite(dU$Du_dtheta)))
+      })
+    })
+  }
+
+  test_that("include_theta = FALSE returns NULL Du_dtheta", {
+    solver <- DtOForwardSolver$new(
+      func_rhs   = decay_rhs,
+      times_sim  = times_sim,
+      obs_times  = times_sim,
+      obs_values = y_obs,
+      params     = params,
+      lambda     = 0.1,
+      method     = "gl2"
+    )
+    solver$solve_state(matrix(0, solver$n_steps, solver$n_vars), y0)
+
+    dU <- solver$get_discrete_control_linearization(
+      t_idx = 1L,
+      include_theta = FALSE
+    )
+
+    expect_null(dU$Du_dtheta)
+  })
+})

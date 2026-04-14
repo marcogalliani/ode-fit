@@ -33,7 +33,10 @@ check_gradient <- function(fn, gr, par, eps = 1e-5, ...) {
   c1    <- 1e-4
   f0 <- safe_eval(par)
   f_trial <- safe_eval(par - alpha * g_analytic)
-  while (is.finite(f0) && is.finite(f_trial) && f_trial > f0 - c1 * alpha * sum(g_analytic^2)) {
+  while (is.finite(f0)) {
+    if (is.finite(f_trial) && f_trial <= f0 - c1 * alpha * sum(g_analytic^2)) {
+      break
+    }
     alpha <- alpha * rho
     if (alpha < 1e-12) break
     f_trial <- safe_eval(par - alpha * g_analytic)

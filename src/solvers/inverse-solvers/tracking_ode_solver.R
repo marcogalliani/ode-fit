@@ -14,7 +14,7 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
                           init_state,
                           inner_max_iter = 200,
                           inner_reltol   = sqrt(.Machine$double.eps),
-                          inner_method   = "euler") {
+                          inner_method   = "gl2") {
       self$initialize_estimator(func_rhs, times_sim, obs_times, obs_values,
                                 fixed_params, lambda, param_scales,
                                 init_state, inner_max_iter, inner_reltol,
@@ -89,27 +89,23 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
         self$outer_objective(theta_norm, param_names)
 
       s      <- self$last_solver
-      if (is.null(s) || is.null(s$y) || is.null(s$p) ||
-          !all(is.finite(s$y)) || !all(is.finite(s$p))) {
+      if (is.null(s) || is.null(s$y) || is.null(s$p)) {
         return(rep(0, length(param_names)))
       }
-      ns     <- s$n_steps
-      np     <- length(param_names)
-      grad_phys <- numeric(np)
-      p_phys <- self$unpack_physical(theta_norm, param_names)
-      J0 <- self$init_state_jacobian_fd(p_phys, param_names)
-      grad_phys <- grad_phys + as.vector(t(J0) %*% s$p[1L, ])
 
-      for (t in seq_len(ns - 1L)) {
-        dt    <- s$dt_vec[t]
-        Fth   <- self$get_param_jacobian(s$y[t, ], s$times_sim[t],
-                                         p_phys, param_names)
-        p_next <- s$p[t + 1L, ]
-        grad_phys <- grad_phys + as.vector(t(Fth) %*% p_next) * dt
+      if (!all(is.finite(s$y)) || !all(is.finite(s$p))) {
+        return(rep(0, length(param_names)))
       }
 
+      p_phys <- self$unpack_physical(theta_norm, param_names)
+      J0 <- self$init_state_jacobian_fd(p_phys, param_names)
       scales <- self$get_scales_vector(param_names)
-      return(grad_phys * scales)
+      s$compute_parameter_gradient_adjoint(
+        param_names = param_names,
+        init_state_jacobian = J0,
+        return_normalized = TRUE,
+        scales = scales
+      )
     },
 
     outer_gradient_dispatch = function(theta_norm, param_names, gradient_mode = "adjoint") {
@@ -139,14 +135,16 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
       S[1L, , ] <- J0
 
       for (t in seq_len(ns - 1L)) {
-        dt    <- s$dt_vec[t]
-        Fth   <- self$get_param_jacobian(s$y[t, ], s$times_sim[t],
-                                         p_phys, param_names)
-        Fy  <- s$get_jacobian(s$y[t, ], s$times_sim[t])
-        At  <- diag(nv) + dt * Fy
-        for (j in seq_len(np)) {
-          S[t + 1L, , j] <- At %*% S[t, , j] + dt * Fth[, j]
-        }
+        dU <- s$get_discrete_control_linearization(
+          t_idx = t,
+          param_names = param_names,
+          include_theta = TRUE
+        )
+        rhs <- dU$Du_dyc %*% S[t, , ] + dU$Du_dtheta
+        S[t + 1L, , ] <- tryCatch(
+          -solve(dU$Du_dyn, rhs),
+          error = function(e) -qr.solve(dU$Du_dyn, rhs)
+        )
       }
       return(S)   # [ns, nv, np]
     },

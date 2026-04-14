@@ -20,7 +20,7 @@ ParameterEstimatorBase <- R6Class("ParameterEstimatorBase",
                                     init_state,
                                     inner_max_iter = 200,
                                     inner_reltol = sqrt(.Machine$double.eps),
-                                    inner_method = "euler") {
+                                    inner_method = "gl2") {
       self$func_rhs <- func_rhs
       self$times_sim <- times_sim
       self$obs_times <- obs_times

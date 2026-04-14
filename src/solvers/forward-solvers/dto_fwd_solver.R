@@ -82,6 +82,108 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       J
     },
 
+    get_param_jacobian = function(y_vec, t_val, param_names = NULL, eps = 1e-7) {
+      if (is.null(param_names)) {
+        param_names <- names(self$params)
+      }
+      np <- length(param_names)
+      nv <- length(y_vec)
+      J  <- matrix(0, nv, np)
+
+      for (j in seq_len(np)) {
+        nm <- param_names[j]
+        if (is.null(self$params[[nm]])) {
+          stop(sprintf("Parameter '%s' not found in solver$params", nm))
+        }
+        dth <- eps * max(abs(self$params[[nm]]), 1)
+        p_p <- self$params
+        p_m <- self$params
+        p_p[[nm]] <- self$params[[nm]] + dth
+        p_m[[nm]] <- self$params[[nm]] - dth
+        J[, j] <- (self$func_rhs(y_vec, t_val, p_p) -
+                   self$func_rhs(y_vec, t_val, p_m)) / (2 * dth)
+      }
+
+      colnames(J) <- param_names
+      J
+    },
+
+    compute_parameter_gradient_adjoint = function(param_names,
+                                                  init_state_jacobian = NULL,
+                                                  return_normalized = FALSE,
+                                                  scales = NULL) {
+      if (is.null(self$y) || is.null(self$p)) {
+        stop("State/adjoint trajectories are not available. Run optimize() first.")
+      }
+
+      if (!all(is.finite(self$y)) || !all(is.finite(self$p))) {
+        grad <- rep(0, length(param_names))
+        names(grad) <- param_names
+        return(grad)
+      }
+
+      ns <- self$n_steps
+      np <- length(param_names)
+      nv <- self$n_vars
+
+      S <- array(0, c(ns, nv, np))
+      if (!is.null(init_state_jacobian)) {
+        S[1L, , ] <- init_state_jacobian
+      }
+
+      for (t in seq_len(ns - 1L)) {
+        dU <- self$get_discrete_control_linearization(
+          t_idx = t,
+          param_names = param_names,
+          include_theta = TRUE
+        )
+
+        rhs <- dU$Du_dyc %*% S[t, , ] + dU$Du_dtheta
+        S[t + 1L, , ] <- tryCatch(
+          -solve(dU$Du_dyn, rhs),
+          error = function(e) -qr.solve(dU$Du_dyn, rhs)
+        )
+      }
+
+      resid <- ifelse(is.na(self$observations_mapped), 0,
+                      self$y - self$observations_mapped)
+      grad_phys <- vapply(
+        seq_len(np),
+        function(j) sum((2 / ns) * resid * S[, , j]),
+        numeric(1L)
+      )
+
+      names(grad_phys) <- param_names
+      if (!return_normalized) {
+        return(grad_phys)
+      }
+
+      if (is.null(scales) || length(scales) != np) {
+        stop("scales must be provided with one entry per parameter when return_normalized = TRUE")
+      }
+      grad_norm <- grad_phys * as.numeric(scales)
+      names(grad_norm) <- param_names
+      grad_norm
+    },
+
+    get_discrete_control_linearization = function(t_idx, param_names = NULL,
+                                                  eps = 1e-7, include_theta = TRUE) {
+      if (is.null(self$y)) {
+        stop("State trajectory is not available. Run optimize() first.")
+      }
+      if (is.null(param_names)) {
+        param_names <- names(self$params)
+      }
+
+      jac_fn <- function(y, t) self$get_jacobian(y, t)
+      param_jac_fn <- NULL
+      if (include_theta) {
+        param_jac_fn <- function(y, t) self$get_param_jacobian(y, t, param_names, eps)
+      }
+
+      private$dto_solver$linearize_control_defect(t_idx, jac_fn, param_jac_fn)
+    },
+
     solve_state = function(u_mat, y0) {
       u_fn   <- function(t) u_mat[pmax(1L, pmin(findInterval(t, self$times_sim), self$n_steps)), ]
       jac_fn <- function(y, t) self$get_jacobian(y, t)

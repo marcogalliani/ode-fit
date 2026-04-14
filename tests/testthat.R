@@ -1,6 +1,7 @@
 library(testthat)
 
 # Numerical ODE solver
+test_file("tests/testthat/numerical-solvers/test-ode-accuracy.R")
 # test_dir("tests/testthat/numerical-solvers", reporter = "summary")
 
 # Forward solvers

@@ -52,6 +52,8 @@ DtOScheme <- R6Class("DtOScheme",
     forward = function(rhs, y0, times, jac_fn = NULL, source_fn = NULL)
       stop("Abstract: override in subclass"),
     adjoint = function(rhs, pT, jac_fn = NULL, source_fn = NULL)
+      stop("Abstract: override in subclass"),
+    linearize_control_defect = function(t_idx, jac_fn, param_jac_fn = NULL)
       stop("Abstract: override in subclass")
   )
 )
@@ -95,6 +97,25 @@ EulerScheme <- R6Class("EulerScheme", inherit = DtOScheme,
       grad_contrib <- matrix(dt_r, ns, nv) *
                         rbind(p[-1L, , drop = FALSE], matrix(0, 1, nv))
       list(p = p, grad_contrib = grad_contrib)
+    },
+
+    linearize_control_defect = function(t_idx, jac_fn, param_jac_fn = NULL) {
+      times <- private$times; y_fwd <- private$y_fwd
+      dt <- diff(times)[t_idx]
+      nv <- ncol(y_fwd)
+      if (!is.finite(dt) || dt <= 0) stop("Invalid time step in linearize_control_defect")
+
+      J_l <- jac_fn(y_fwd[t_idx, ], times[t_idx])
+      Du_dtheta <- NULL
+      if (!is.null(param_jac_fn)) {
+        Du_dtheta <- -param_jac_fn(y_fwd[t_idx, ], times[t_idx])
+      }
+
+      list(
+        Du_dyc = -diag(1 / dt, nv) - J_l,
+        Du_dyn = diag(1 / dt, nv),
+        Du_dtheta = Du_dtheta
+      )
     }
   )
 )
@@ -154,6 +175,34 @@ CrankNicolsonScheme <- R6Class("CrankNicolsonScheme", inherit = DtOScheme,
                         rbind(p[-1L, , drop = FALSE], matrix(0, 1, nv)) +
                       matrix(dt_l_vec / 2, ns, nv) * p
       list(p = p, grad_contrib = grad_contrib)
+    },
+
+    linearize_control_defect = function(t_idx, jac_fn, param_jac_fn = NULL) {
+      times <- private$times; y_fwd <- private$y_fwd
+      dt <- diff(times)[t_idx]
+      nv <- ncol(y_fwd)
+      if (!is.finite(dt) || dt <= 0) stop("Invalid time step in linearize_control_defect")
+
+      y_l <- y_fwd[t_idx, ]
+      y_r <- y_fwd[t_idx + 1L, ]
+      t_l <- times[t_idx]
+      t_r <- times[t_idx + 1L]
+
+      J_l <- jac_fn(y_l, t_l)
+      J_r <- jac_fn(y_r, t_r)
+
+      Du_dtheta <- NULL
+      if (!is.null(param_jac_fn)) {
+        Fth_l <- param_jac_fn(y_l, t_l)
+        Fth_r <- param_jac_fn(y_r, t_r)
+        Du_dtheta <- -0.5 * (Fth_l + Fth_r)
+      }
+
+      list(
+        Du_dyc = -diag(1 / dt, nv) - 0.5 * J_l,
+        Du_dyn = diag(1 / dt, nv) - 0.5 * J_r,
+        Du_dtheta = Du_dtheta
+      )
     }
   )
 )
@@ -214,6 +263,30 @@ GL1Scheme <- R6Class("GL1Scheme", inherit = DtOScheme,
       grad_contrib <- matrix(dt_r, ns, nv) *
                         rbind(p[-1L, , drop = FALSE], matrix(0, 1, nv))
       list(p = p, grad_contrib = grad_contrib)
+    },
+
+    linearize_control_defect = function(t_idx, jac_fn, param_jac_fn = NULL) {
+      times <- private$times; y_fwd <- private$y_fwd
+      dt <- diff(times)[t_idx]
+      nv <- ncol(y_fwd)
+      if (!is.finite(dt) || dt <= 0) stop("Invalid time step in linearize_control_defect")
+
+      y_l <- y_fwd[t_idx, ]
+      y_r <- y_fwd[t_idx + 1L, ]
+      t_mid <- (times[t_idx] + times[t_idx + 1L]) / 2
+      y_mid <- (y_l + y_r) / 2
+
+      J_mid <- jac_fn(y_mid, t_mid)
+      Du_dtheta <- NULL
+      if (!is.null(param_jac_fn)) {
+        Du_dtheta <- -param_jac_fn(y_mid, t_mid)
+      }
+
+      list(
+        Du_dyc = -diag(1 / dt, nv) - 0.5 * J_mid,
+        Du_dyn = diag(1 / dt, nv) - 0.5 * J_mid,
+        Du_dtheta = Du_dtheta
+      )
     }
   )
 )
@@ -294,6 +367,54 @@ GL2Scheme <- R6Class("GL2Scheme", inherit = DtOScheme,
         lam_sum[t, ] <- lam1 + lam2
       }
       list(p = p, grad_contrib = lam_sum)
+    },
+
+    linearize_control_defect = function(t_idx, jac_fn, param_jac_fn = NULL) {
+      times <- private$times; y_fwd <- private$y_fwd; aux <- private$aux
+      dt <- diff(times)[t_idx]
+      nv <- ncol(y_fwd)
+      if (!is.finite(dt) || dt <= 0) stop("Invalid time step in linearize_control_defect")
+
+      Y1 <- aux[[t_idx]][1L, ]
+      Y2 <- aux[[t_idx]][2L, ]
+      t1 <- times[t_idx] + .gl2_c1 * dt
+      t2 <- times[t_idx] + .gl2_c2 * dt
+
+      J1 <- jac_fn(Y1, t1)
+      J2 <- jac_fn(Y2, t2)
+
+      M <- rbind(
+        cbind(diag(nv) - dt * .gl2_A11 * J1, -dt * .gl2_A12 * J1),
+        cbind(-dt * .gl2_A21 * J2, diag(nv) - dt * .gl2_A22 * J2)
+      )
+
+      rhs_y <- rbind(diag(nv), diag(nv))
+      DY <- solve(M, rhs_y)
+      DY1 <- DY[seq_len(nv), , drop = FALSE]
+      DY2 <- DY[nv + seq_len(nv), , drop = FALSE]
+      dFavg_dyc <- 0.5 * (J1 %*% DY1 + J2 %*% DY2)
+
+      Du_dtheta <- NULL
+      if (!is.null(param_jac_fn)) {
+        Fth1 <- param_jac_fn(Y1, t1)
+        Fth2 <- param_jac_fn(Y2, t2)
+        np <- ncol(Fth1)
+        rhs_th <- rbind(
+          dt * (.gl2_A11 * Fth1 + .gl2_A12 * Fth2),
+          dt * (.gl2_A21 * Fth1 + .gl2_A22 * Fth2)
+        )
+        DTh <- solve(M, rhs_th)
+        DTh1 <- DTh[seq_len(nv), , drop = FALSE]
+        DTh2 <- DTh[nv + seq_len(nv), , drop = FALSE]
+        dFavg_dth <- 0.5 * (J1 %*% DTh1 + Fth1 + J2 %*% DTh2 + Fth2)
+        Du_dtheta <- -dFavg_dth
+      }
+
+      list(
+        Du_dyc = -diag(1 / dt, nv) - dFavg_dyc,
+        Du_dyn = diag(1 / dt, nv),
+        Du_dtheta = Du_dtheta
+      )
     }
   )
 )
@@ -315,6 +436,9 @@ DtOSolver <- R6Class("DtOSolver",
     },
     solve_adjoint = function(rhs, pT, jac_fn = NULL, source_fn = NULL) {
       private$scheme$adjoint(rhs, pT, jac_fn, source_fn)
+    },
+    linearize_control_defect = function(t_idx, jac_fn, param_jac_fn = NULL) {
+      private$scheme$linearize_control_defect(t_idx, jac_fn, param_jac_fn)
     }
   )
 )
