@@ -121,8 +121,10 @@ with matrices returned by the API:
 
 This is exposed through:
 
-- scheme-level method `linearize_control_defect(...)`
-- forward-solver wrapper `get_discrete_control_linearization(...)`
+- scheme-level method `differentiate_discrete_control_map(...)`
+- forward-solver wrapper `get_discrete_control_jacobian(...)`
+
+The API also provides split accessors `dcontrol_dy_curr`, `dcontrol_dy_next`, `dcontrol_dtheta` (and forward-solver wrappers `get_dcontrol_dy_curr`, `get_dcontrol_dy_next`, `get_dcontrol_dtheta`) for cases where only one derivative block is needed.
 
 and is consumed by both tracking and cascading outer gradients.
 

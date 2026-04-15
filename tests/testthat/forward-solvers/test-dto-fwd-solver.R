@@ -423,9 +423,9 @@ describe("T13: optimize vs optimize_bvp — 2-D LV, cost reduction and trajector
 })
 
 # ---------------------------------------------------------------------------
-# T14. Discrete control linearization API
+# T14. Discrete control Jacobian API
 # ---------------------------------------------------------------------------
-describe("T14: get_discrete_control_linearization API across methods", {
+describe("T14: discrete control Jacobian API across methods", {
 
   params    <- list(k = 0.4)
   times_sim <- seq(0, 1, by = 0.1)
@@ -449,8 +449,8 @@ describe("T14: get_discrete_control_linearization API across methods", {
       u0 <- matrix(0, solver$n_steps, solver$n_vars)
       solver$solve_state(u0, y0)
 
-      test_that(sprintf("%s: linearization has expected structure", m), {
-        dU <- solver$get_discrete_control_linearization(
+      test_that(sprintf("%s: combined Jacobian has expected structure", m), {
+        dU <- solver$get_discrete_control_jacobian(
           t_idx = 1L,
           param_names = c("k"),
           include_theta = TRUE
@@ -467,6 +467,18 @@ describe("T14: get_discrete_control_linearization API across methods", {
         expect_true(all(is.finite(dU$Du_dyn)))
         expect_true(all(is.finite(dU$Du_dtheta)))
       })
+
+      test_that(sprintf("%s: split derivative accessors are consistent", m), {
+        dU <- solver$get_discrete_control_jacobian(
+          t_idx = 1L,
+          param_names = c("k"),
+          include_theta = TRUE
+        )
+
+        expect_equal(solver$get_dcontrol_dy_curr(1L), dU$Du_dyc)
+        expect_equal(solver$get_dcontrol_dy_next(1L), dU$Du_dyn)
+        expect_equal(solver$get_dcontrol_dtheta(1L, c("k")), dU$Du_dtheta)
+      })
     })
   }
 
@@ -482,7 +494,7 @@ describe("T14: get_discrete_control_linearization API across methods", {
     )
     solver$solve_state(matrix(0, solver$n_steps, solver$n_vars), y0)
 
-    dU <- solver$get_discrete_control_linearization(
+    dU <- solver$get_discrete_control_jacobian(
       t_idx = 1L,
       include_theta = FALSE
     )

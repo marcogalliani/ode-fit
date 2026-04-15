@@ -135,7 +135,7 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
       S[1L, , ] <- J0
 
       for (t in seq_len(ns - 1L)) {
-        dU <- s$get_discrete_control_linearization(
+        dU <- s$get_discrete_control_jacobian(
           t_idx = t,
           param_names = param_names,
           include_theta = TRUE

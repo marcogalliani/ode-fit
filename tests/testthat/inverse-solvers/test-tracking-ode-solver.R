@@ -185,7 +185,7 @@ describe("TR1a: Outer gradient consistency — deterministic fixed initial condi
     fixed_params = list(),
     lambda       = 1e2,
     param_scales = param_scales,
-    inner_method = "euler"
+    inner_method = "gl2"
   )
 
   stability <- filter_stable_info(theta_test, function(theta) {

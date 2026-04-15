@@ -92,7 +92,7 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
         idx_c <- seq(t, NT, by = ns)
         idx_n <- seq(t + 1L, NT, by = ns)
 
-        dU <- s$get_discrete_control_linearization(t, include_theta = FALSE)
+        dU <- s$get_discrete_control_jacobian(t, include_theta = FALSE)
         Du_dyc <- dU$Du_dyc
         Du_dyn <- dU$Du_dyn
         wt <- w_trap[t]
@@ -110,7 +110,7 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
         idx_c <- seq(t, NT, by = ns)
         idx_n <- seq(t + 1L, NT, by = ns)
 
-        dU <- s$get_discrete_control_linearization(t, param_names, include_theta = TRUE)
+        dU <- s$get_discrete_control_jacobian(t, param_names, include_theta = TRUE)
         Du_dyc <- dU$Du_dyc
         Du_dyn <- dU$Du_dyn
         Du_dtheta <- dU$Du_dtheta
@@ -127,10 +127,10 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
           dth <- 1e-6 * max(abs(th0), 1)
 
           s$params[[nm]] <- th0 + dth
-          dU_p <- s$get_discrete_control_linearization(t, include_theta = FALSE)
+          dU_p <- s$get_discrete_control_jacobian(t, include_theta = FALSE)
 
           s$params[[nm]] <- th0 - dth
-          dU_m <- s$get_discrete_control_linearization(t, include_theta = FALSE)
+          dU_m <- s$get_discrete_control_jacobian(t, include_theta = FALSE)
 
           s$params[[nm]] <- th0
 

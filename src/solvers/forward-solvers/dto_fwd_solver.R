@@ -132,7 +132,7 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       }
 
       for (t in seq_len(ns - 1L)) {
-        dU <- self$get_discrete_control_linearization(
+        dU <- self$get_discrete_control_jacobian(
           t_idx = t,
           param_names = param_names,
           include_theta = TRUE
@@ -166,8 +166,8 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       grad_norm
     },
 
-    get_discrete_control_linearization = function(t_idx, param_names = NULL,
-                                                  eps = 1e-7, include_theta = TRUE) {
+    get_discrete_control_jacobian = function(t_idx, param_names = NULL,
+                                             eps = 1e-7, include_theta = TRUE) {
       if (is.null(self$y)) {
         stop("State trajectory is not available. Run optimize() first.")
       }
@@ -181,7 +181,32 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
         param_jac_fn <- function(y, t) self$get_param_jacobian(y, t, param_names, eps)
       }
 
-      private$dto_solver$linearize_control_defect(t_idx, jac_fn, param_jac_fn)
+      private$dto_solver$differentiate_discrete_control_map(t_idx, jac_fn, param_jac_fn)
+    },
+
+    get_dcontrol_dy_curr = function(t_idx, eps = 1e-7) {
+      self$get_discrete_control_jacobian(
+        t_idx = t_idx,
+        eps = eps,
+        include_theta = FALSE
+      )$Du_dyc
+    },
+
+    get_dcontrol_dy_next = function(t_idx, eps = 1e-7) {
+      self$get_discrete_control_jacobian(
+        t_idx = t_idx,
+        eps = eps,
+        include_theta = FALSE
+      )$Du_dyn
+    },
+
+    get_dcontrol_dtheta = function(t_idx, param_names = NULL, eps = 1e-7) {
+      self$get_discrete_control_jacobian(
+        t_idx = t_idx,
+        param_names = param_names,
+        eps = eps,
+        include_theta = TRUE
+      )$Du_dtheta
     },
 
     solve_state = function(u_mat, y0) {

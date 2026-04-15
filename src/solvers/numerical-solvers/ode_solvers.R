@@ -53,8 +53,17 @@ DtOScheme <- R6Class("DtOScheme",
       stop("Abstract: override in subclass"),
     adjoint = function(rhs, pT, jac_fn = NULL, source_fn = NULL)
       stop("Abstract: override in subclass"),
-    linearize_control_defect = function(t_idx, jac_fn, param_jac_fn = NULL)
-      stop("Abstract: override in subclass")
+    differentiate_discrete_control_map = function(t_idx, jac_fn, param_jac_fn = NULL)
+      stop("Abstract: override in subclass"),
+    dcontrol_dy_curr = function(t_idx, jac_fn) {
+      self$differentiate_discrete_control_map(t_idx, jac_fn, NULL)$Du_dyc
+    },
+    dcontrol_dy_next = function(t_idx, jac_fn) {
+      self$differentiate_discrete_control_map(t_idx, jac_fn, NULL)$Du_dyn
+    },
+    dcontrol_dtheta = function(t_idx, jac_fn, param_jac_fn = NULL) {
+      self$differentiate_discrete_control_map(t_idx, jac_fn, param_jac_fn)$Du_dtheta
+    }
   )
 )
 
@@ -99,11 +108,11 @@ EulerScheme <- R6Class("EulerScheme", inherit = DtOScheme,
       list(p = p, grad_contrib = grad_contrib)
     },
 
-    linearize_control_defect = function(t_idx, jac_fn, param_jac_fn = NULL) {
+    differentiate_discrete_control_map = function(t_idx, jac_fn, param_jac_fn = NULL) {
       times <- private$times; y_fwd <- private$y_fwd
       dt <- diff(times)[t_idx]
       nv <- ncol(y_fwd)
-      if (!is.finite(dt) || dt <= 0) stop("Invalid time step in linearize_control_defect")
+      if (!is.finite(dt) || dt <= 0) stop("Invalid time step in differentiate_discrete_control_map")
 
       J_l <- jac_fn(y_fwd[t_idx, ], times[t_idx])
       Du_dtheta <- NULL
@@ -177,11 +186,11 @@ CrankNicolsonScheme <- R6Class("CrankNicolsonScheme", inherit = DtOScheme,
       list(p = p, grad_contrib = grad_contrib)
     },
 
-    linearize_control_defect = function(t_idx, jac_fn, param_jac_fn = NULL) {
+    differentiate_discrete_control_map = function(t_idx, jac_fn, param_jac_fn = NULL) {
       times <- private$times; y_fwd <- private$y_fwd
       dt <- diff(times)[t_idx]
       nv <- ncol(y_fwd)
-      if (!is.finite(dt) || dt <= 0) stop("Invalid time step in linearize_control_defect")
+      if (!is.finite(dt) || dt <= 0) stop("Invalid time step in differentiate_discrete_control_map")
 
       y_l <- y_fwd[t_idx, ]
       y_r <- y_fwd[t_idx + 1L, ]
@@ -265,11 +274,11 @@ GL1Scheme <- R6Class("GL1Scheme", inherit = DtOScheme,
       list(p = p, grad_contrib = grad_contrib)
     },
 
-    linearize_control_defect = function(t_idx, jac_fn, param_jac_fn = NULL) {
+    differentiate_discrete_control_map = function(t_idx, jac_fn, param_jac_fn = NULL) {
       times <- private$times; y_fwd <- private$y_fwd
       dt <- diff(times)[t_idx]
       nv <- ncol(y_fwd)
-      if (!is.finite(dt) || dt <= 0) stop("Invalid time step in linearize_control_defect")
+      if (!is.finite(dt) || dt <= 0) stop("Invalid time step in differentiate_discrete_control_map")
 
       y_l <- y_fwd[t_idx, ]
       y_r <- y_fwd[t_idx + 1L, ]
@@ -369,11 +378,11 @@ GL2Scheme <- R6Class("GL2Scheme", inherit = DtOScheme,
       list(p = p, grad_contrib = lam_sum)
     },
 
-    linearize_control_defect = function(t_idx, jac_fn, param_jac_fn = NULL) {
+    differentiate_discrete_control_map = function(t_idx, jac_fn, param_jac_fn = NULL) {
       times <- private$times; y_fwd <- private$y_fwd; aux <- private$aux
       dt <- diff(times)[t_idx]
       nv <- ncol(y_fwd)
-      if (!is.finite(dt) || dt <= 0) stop("Invalid time step in linearize_control_defect")
+      if (!is.finite(dt) || dt <= 0) stop("Invalid time step in differentiate_discrete_control_map")
 
       Y1 <- aux[[t_idx]][1L, ]
       Y2 <- aux[[t_idx]][2L, ]
@@ -437,8 +446,17 @@ DtOSolver <- R6Class("DtOSolver",
     solve_adjoint = function(rhs, pT, jac_fn = NULL, source_fn = NULL) {
       private$scheme$adjoint(rhs, pT, jac_fn, source_fn)
     },
-    linearize_control_defect = function(t_idx, jac_fn, param_jac_fn = NULL) {
-      private$scheme$linearize_control_defect(t_idx, jac_fn, param_jac_fn)
+    differentiate_discrete_control_map = function(t_idx, jac_fn, param_jac_fn = NULL) {
+      private$scheme$differentiate_discrete_control_map(t_idx, jac_fn, param_jac_fn)
+    },
+    dcontrol_dy_curr = function(t_idx, jac_fn) {
+      private$scheme$dcontrol_dy_curr(t_idx, jac_fn)
+    },
+    dcontrol_dy_next = function(t_idx, jac_fn) {
+      private$scheme$dcontrol_dy_next(t_idx, jac_fn)
+    },
+    dcontrol_dtheta = function(t_idx, jac_fn, param_jac_fn = NULL) {
+      private$scheme$dcontrol_dtheta(t_idx, jac_fn, param_jac_fn)
     }
   )
 )
