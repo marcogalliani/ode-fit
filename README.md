@@ -1,3 +1,7 @@
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/marcogalliani/ode-fit/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/marcogalliani/ode-fit/actions/workflows/R-CMD-check.yaml)
+<!-- badges: end -->
+
 # Physics-Informed smoothing 
 This repo implements a class of physics-informed smoothing models to integrate empirical data with physical apriori knowledge about the data generating mechanism. In this repo, the physics will be expressed through a wide range of possibly nonlinear ordinary differential equations (ODEs). The general estimation problem looks as follows:
 
