@@ -5,8 +5,6 @@ library(tidyr)
 library(reshape2)
 library(gridExtra)
 
-
-
 # =============================================================================
 # DtOForwardSolver
 #
@@ -17,8 +15,9 @@ library(gridExtra)
 #   s.t.   dy/dt = f(y, t, theta) + u(t),   y(t_1) = y_0
 #
 # `method` selects the DtO scheme: "euler", "cn", "gl1", or "gl2".
-# The corresponding DtOSolver (from ode_solvers.R) wraps a DtO scheme that
+# The corresponding OCPDtOSolver (from ode_solvers.R) wraps a DtO scheme that
 # provides both the forward integrator and its consistent discrete adjoint.
+#
 # =============================================================================
 DtOForwardSolver <- R6Class("DtOForwardSolver",
 
@@ -42,15 +41,39 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
   ),
 
   public = list(
-    func_rhs = NULL, params = NULL, lambda = NULL,
+    model = NULL, params = NULL, lambda = NULL,
     times_sim = NULL, n_steps = NULL, dt_vec = NULL, n_vars = NULL,
     method = NULL,
 
     observations_mapped = NULL,
     y = NULL, u = NULL, p = NULL,
 
-    initialize = function(func_rhs, times_sim, obs_times, obs_values, params, lambda, method = "gl2") {
-      self$func_rhs <- func_rhs
+    #' Initialize DtOForwardSolver runtime state.
+    #'
+    #' @param model ODE model object implementing methods
+    #'   `rhs(y, t, params)`, `jacobian_state(y, t, params)`, and
+    #'   `jacobian_param(y, t, params, param_names)`.
+    #' @param times_sim Numeric simulation grid. It is merged with
+    #'   `obs_times` after rounding to 10 digits.
+    #' @param obs_times Numeric observation times.
+    #' @param obs_values Observation matrix of size `length(obs_times) x nv`.
+    #'   For scalar ODEs, pass a one-column matrix (not a plain vector).
+    #' @param params Named list/vector of model parameters.
+    #' @param lambda Nonnegative control regularization weight.
+    #' @param method DtO scheme name in `{euler, cn, gl1, gl2}`.
+    #' @return No explicit return value. Initializes object fields and caches.
+    #' @details Builds internal grid metadata (`times_sim`, `n_steps`, `n_vars`,
+    #'   `dt_vec`), creates the backend solver with `make_dto_solver(method)`,
+    #'   maps observations onto the internal grid as `observations_mapped`, and
+    #'   initializes `y`, `u`, `p` as zero matrices of size `ns x nv`.
+    #' @note Observation rows are aligned by time equality on the rounded merged
+    #'   grid, not by positional index.
+    initialize = function(model, times_sim, obs_times, obs_values, params, lambda, method = "gl2") {
+      if (is.null(model) || !inherits(model, "ODEModel")) {
+        stop("model must be an ODEModel instance")
+      }
+
+      self$model <- model
       obs_times  <- round(obs_times,  digits = 10)
       times_sim  <- sort(unique(round(c(times_sim, obs_times), digits = 10)))
       self$times_sim <- times_sim
@@ -68,46 +91,38 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       self$u <- matrix(0, self$n_steps, self$n_vars)
       self$p <- matrix(0, self$n_steps, self$n_vars)
     },
+    
 
-    get_jacobian = function(y_vec, t_val) {
-      n   <- length(y_vec)
-      J   <- matrix(0, n, n)
-      eps <- 1e-7
-      for (j in seq_len(n)) {
-        y_p <- y_vec; y_p[j] <- y_p[j] + eps
-        y_m <- y_vec; y_m[j] <- y_m[j] - eps
-        J[, j] <- (self$func_rhs(y_p, t_val, self$params) -
-                   self$func_rhs(y_m, t_val, self$params)) / (2 * eps)
-      }
-      J
-    },
-
-    get_param_jacobian = function(y_vec, t_val, param_names = NULL, eps = 1e-7) {
-      if (is.null(param_names)) {
-        param_names <- names(self$params)
-      }
-      np <- length(param_names)
-      nv <- length(y_vec)
-      J  <- matrix(0, nv, np)
-
-      for (j in seq_len(np)) {
-        nm <- param_names[j]
-        if (is.null(self$params[[nm]])) {
-          stop(sprintf("Parameter '%s' not found in solver$params", nm))
-        }
-        dth <- eps * max(abs(self$params[[nm]]), 1)
-        p_p <- self$params
-        p_m <- self$params
-        p_p[[nm]] <- self$params[[nm]] + dth
-        p_m[[nm]] <- self$params[[nm]] - dth
-        J[, j] <- (self$func_rhs(y_vec, t_val, p_p) -
-                   self$func_rhs(y_vec, t_val, p_m)) / (2 * dth)
-      }
-
-      colnames(J) <- param_names
-      J
-    },
-
+    #' Compute loss function gradient w.r.t. ODE params from discrete sensitivities.
+    #'
+    #' @description
+    #' Computes `dH/dtheta` for the outer parameter problem by propagating
+    #' state sensitivities through differentiated discrete control maps and
+    #' contracting them with residuals.
+    #'
+    #' @param param_names Character vector of parameters to differentiate.
+    #' @param init_state_jacobian Optional matrix `nv x np` for initial-state
+    #'   sensitivity `dy0/dtheta`.
+    #' @param return_normalized Logical flag; if `TRUE`, scale physical gradient
+    #'   componentwise by `scales`.
+    #' @param scales Numeric vector of length `np`, required only when
+    #'   `return_normalized = TRUE`.
+    #' @return Named numeric vector of length `np` containing either physical or
+    #'   normalized gradient.
+    #' 
+    #' @details Builds sensitivity tensor `S[time, state, param]` via one-step
+    #'   recursion using discrete Jacobian blocks from
+    #'   `get_discrete_control_jacobian()`.
+    #' @details At each step, solves
+    #'   `Du_dyn * S[t+1] = -(Du_dyc * S[t] + Du_dtheta)`
+    #'   with `solve()` and `qr.solve()` fallback.
+    #' 
+    #' @note If `self$y` or `self$p` contains non-finite values, returns a zero
+    #'   gradient vector instead of stopping.
+    #' 
+    #' @section Errors:
+    #' Stops if trajectories `self$y`/`self$p` are unavailable. Stops if
+    #' normalization is requested without a valid `scales` vector.
     compute_parameter_gradient_adjoint = function(param_names,
                                                   init_state_jacobian = NULL,
                                                   return_normalized = FALSE,
@@ -166,6 +181,26 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       grad_norm
     },
 
+    #' Differentiate one-step discrete control map.
+    #'
+    #' @description
+    #' Returns Jacobian blocks of the local discrete control equation with
+    #' respect to `y_t`, `y_{t+1}`, and optionally `theta`.
+    #'
+    #' @param t_idx Time-step index in `1..(ns-1)`.
+    #' @param param_names Optional subset of parameter names used for
+    #'   `Du_dtheta` columns.
+    #' @param eps Perturbation scale passed to parameter Jacobian estimation.
+    #' @param include_theta Logical flag; if `FALSE`, skips `Du_dtheta`.
+    #'
+    #' @return List with entries `Du_dyc`, `Du_dyn`, and `Du_dtheta`.
+    #'   `Du_dtheta` can be `NULL` when `include_theta = FALSE`.
+    #'
+    #' @details Delegates to
+    #'   `private$dto_solver$differentiate_discrete_control_map()` using
+    #'   internally constructed Jacobian callbacks.
+    #' @section Errors:
+    #' Stops if state trajectory is unavailable.
     get_discrete_control_jacobian = function(t_idx, param_names = NULL,
                                              eps = 1e-7, include_theta = TRUE) {
       if (is.null(self$y)) {
@@ -175,15 +210,29 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
         param_names <- names(self$params)
       }
 
-      jac_fn <- function(y, t) self$get_jacobian(y, t)
+      jac_fn <- function(y, t) self$model$jacobian_state(y, t, self$params)
       param_jac_fn <- NULL
       if (include_theta) {
-        param_jac_fn <- function(y, t) self$get_param_jacobian(y, t, param_names, eps)
+        param_jac_fn <- function(y, t) {
+          self$model$jacobian_param(
+            y = y, t = t, params = self$params,
+            param_names = param_names,
+            eps = eps
+          )
+        }
       }
-
       private$dto_solver$differentiate_discrete_control_map(t_idx, jac_fn, param_jac_fn)
     },
 
+    #' Convenience accessor for `dU/dy_curr`.
+    #'
+    #' @description
+    #' Returns only `Du_dyc` from `get_discrete_control_jacobian()`.
+    #'
+    #' @param t_idx Time-step index in `1..(ns-1)`.
+    #' @param eps Perturbation scale forwarded to
+    #'   `get_discrete_control_jacobian()`.
+    #' @return Matrix `Du_dyc` for the requested time step.
     get_dcontrol_dy_curr = function(t_idx, eps = 1e-7) {
       self$get_discrete_control_jacobian(
         t_idx = t_idx,
@@ -192,6 +241,15 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       )$Du_dyc
     },
 
+    #' Convenience accessor for `dU/dy_next`.
+    #'
+    #' @description
+    #' Returns only `Du_dyn` from `get_discrete_control_jacobian()`.
+    #'
+    #' @param t_idx Time-step index in `1..(ns-1)`.
+    #' @param eps Perturbation scale forwarded to
+    #'   `get_discrete_control_jacobian()`.
+    #' @return Matrix `Du_dyn` for the requested time step.
     get_dcontrol_dy_next = function(t_idx, eps = 1e-7) {
       self$get_discrete_control_jacobian(
         t_idx = t_idx,
@@ -200,6 +258,16 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       )$Du_dyn
     },
 
+    #' Convenience accessor for `dU/dtheta`.
+    #'
+    #' @description
+    #' Returns only `Du_dtheta` from `get_discrete_control_jacobian()`.
+    #'
+    #' @param t_idx Time-step index in `1..(ns-1)`.
+    #' @param param_names Optional subset of parameter names.
+    #' @param eps Perturbation scale forwarded to
+    #'   `get_discrete_control_jacobian()`.
+    #' @return Matrix `Du_dtheta` for the requested time step.
     get_dcontrol_dtheta = function(t_idx, param_names = NULL, eps = 1e-7) {
       self$get_discrete_control_jacobian(
         t_idx = t_idx,
@@ -209,21 +277,54 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       )$Du_dtheta
     },
 
+    #' Solve forward state trajectory for fixed controls.
+    #'
+    #' @description
+    #' Solves `dy/dt = f(y,t,theta) + u(t)` on `self$times_sim`.
+    #'
+    #' @param u_mat Control matrix of size `ns x nv` on the simulation grid.
+    #' @param y0 Initial state vector of length `nv`.
+    #' @return Forward solver list returned by `OCPDtOSolver`: `list(y, aux)`.
+    #' @note `u(t)` is sampled from `u_mat` by interval index via `findInterval`.
     solve_state = function(u_mat, y0) {
       u_fn   <- function(t) u_mat[pmax(1L, pmin(findInterval(t, self$times_sim), self$n_steps)), ]
-      jac_fn <- function(y, t) self$get_jacobian(y, t)
-      rhs    <- function(y, t) self$func_rhs(y, t, self$params) + u_fn(t)
+      jac_fn <- function(y, t) self$model$jacobian_state(y, t, self$params)
+      rhs    <- function(y, t) self$model$rhs(y, t, self$params) + u_fn(t)
       private$dto_solver$solve_state(rhs, y0, self$times_sim, jac_fn)
     },
 
+    #' Solve discrete adjoint trajectory for a forward state path.
+    #'
+    #' @description
+    #' Computes adjoint variables and `grad_contrib` for control gradients.
+    #'
+    #' @param y_fwd Forward trajectory matrix of size `ns x nv`.
+    #' @return Adjoint solver list returned by `OCPDtOSolver`:
+    #'   `list(p, grad_contrib)`.
+    #' @details Uses uncontrolled dynamics `f(y,t,theta)` and source term
+    #'   `(2/ns) * (y - obs)` with NA observations masked to zero.
+    #' @note Uses terminal condition `pT = 0`; endpoint handling is provided by
+    #'   the selected DtO scheme.
     solve_adjoint = function(y_fwd) {
-      rhs_cont  <- function(y, t) self$func_rhs(y, t, self$params)
-      jac_fn    <- function(y, t) self$get_jacobian(y, t)
+      rhs_cont  <- function(y, t) self$model$rhs(y, t, self$params)
+      jac_fn    <- function(y, t) self$model$jacobian_state(y, t, self$params)
       source_fn <- private$make_source_fn(y_fwd)
       pT        <- rep(0, self$n_vars)
       private$dto_solver$solve_adjoint(rhs_cont, pT, jac_fn, source_fn)
     },
 
+    #' Solve state and adjoint in one pipeline call.
+    #'
+    #' @description
+    #' Convenience wrapper used by cost/gradient routines so forward and adjoint
+    #' evaluations are synchronized for one control iterate.
+    #'
+    #' @param u_mat Control matrix of size `ns x nv`.
+    #' @param y0 Initial state vector of length `nv`.
+    #' @return List with fields `y`, `p`, `grad_contrib`, and `converged`.
+    #' @note If forward trajectory is non-finite, returns `converged = FALSE`,
+    #'   `p = NULL`, and `grad_contrib = NULL`.
+    #' @note This method does not update cache fields directly.
     solve_state_adjoint = function(u_mat, y0) {
       fwd <- self$solve_state(u_mat, y0)
       if (!all(is.finite(fwd$y)))
@@ -287,7 +388,7 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
     optimize_bvp = function(y0, z_init = NULL,
                             max_iter = 50L, tol = 1e-8, verbose = FALSE) {
       ns <- self$n_steps; ny <- self$n_vars
-      jac_fn <- function(y, t) self$get_jacobian(y, t)
+      jac_fn <- function(y, t) self$model$jacobian_state(y, t, self$params)
 
       if (length(y0) == 1L && is.na(y0)) {
         first_row <- which(!is.na(self$observations_mapped[, 1L]))[1L]
@@ -313,8 +414,8 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       F_rhs_inner <- function(t_val, z) {
         y_t <- z[seq_len(ny)]; p_t <- z[ny + seq_len(ny)]
         ti  <- get_idx(t_val)
-        fy  <- self$func_rhs(y_t, t_val, self$params)
-        Jfy <- self$get_jacobian(y_t, t_val)
+        fy  <- self$model$rhs(y_t, t_val, self$params)
+        Jfy <- self$model$jacobian_state(y_t, t_val, self$params)
         c(fy - p_t / two_lam,
           as.vector(-(t(Jfy) %*% p_t)) -
             two_over_ns * obs_mask[ti, ] * (y_t - obs_clean[ti, ]))
@@ -328,7 +429,7 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
 
       if (is.null(z_init)) {
         euler_dto <- make_dto_solver("euler")
-        rhs_euler <- function(y, t) self$func_rhs(y, t, self$params)
+        rhs_euler <- function(y, t) self$model$rhs(y, t, self$params)
         y_guess   <- euler_dto$solve_state(rhs_euler, y0, self$times_sim)$y
         source_fn <- private$make_source_fn(y_guess)
         pT        <- rep(0, ny)

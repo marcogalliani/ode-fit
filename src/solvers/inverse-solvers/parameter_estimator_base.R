@@ -4,7 +4,7 @@ ParameterEstimatorBase <- R6Class("ParameterEstimatorBase",
   public = list(
     inner_solver_class = NULL,
     times_sim = NULL, obs_times = NULL, obs_values = NULL,
-    func_rhs = NULL, fixed_params = NULL, lambda = NULL,
+    model = NULL, fixed_params = NULL, lambda = NULL,
     param_scales = NULL,
     init_state = NULL,
     n_vars = NULL,
@@ -15,26 +15,30 @@ ParameterEstimatorBase <- R6Class("ParameterEstimatorBase",
     last_u = NULL,
     history = NULL,
 
-    initialize_estimator = function(func_rhs, times_sim, obs_times, obs_values,
-                                    fixed_params, lambda, param_scales,
-                                    init_state,
+    initialize_estimator = function(model, times_sim, obs_times, obs_values,
+                                    lambda,
                                     inner_max_iter = 200,
                                     inner_reltol = sqrt(.Machine$double.eps),
                                     inner_method = "gl2") {
-      self$func_rhs <- func_rhs
+      if (is.null(model) || !inherits(model, "ODEModel")) {
+        stop("model must be an ODEModel instance")
+      }
+
+      self$model <- model
       self$times_sim <- times_sim
       self$obs_times <- obs_times
       self$obs_values <- obs_values
       self$n_vars <- self$infer_n_vars(obs_values)
-      if (is.null(init_state) || !is.function(init_state)) {
-        stop("init_state must be provided as a function(p)")
+      if (is.null(model$init_state_fun) || !is.function(model$init_state_fun)) {
+        stop("model must provide init_state(params)")
       }
-      self$fixed_params <- fixed_params
+
+      self$fixed_params <- model$fixed_params
       self$lambda <- lambda
       self$inner_solver_class <- DtOForwardSolver
       self$inner_method <- inner_method
-      self$param_scales <- param_scales
-      self$init_state <- init_state
+      self$param_scales <- model$param_scales
+      self$init_state <- function(params_phys) self$model$init_state(params_phys)
       self$inner_max_iter <- inner_max_iter
       self$inner_reltol <- inner_reltol
       self$history <- list()
@@ -132,21 +136,6 @@ ParameterEstimatorBase <- R6Class("ParameterEstimatorBase",
         J[, j] <- (y0_p - y0_m) / (2 * dth)
       }
 
-      J
-    },
-
-    get_param_jacobian = function(y, t, p_phys, param_names, eps = 1e-7) {
-      nv  <- length(y)
-      np  <- length(param_names)
-      J   <- matrix(0, nv, np)
-      for (j in seq_len(np)) {
-        dth <- eps * max(abs(p_phys[[param_names[j]]]), 1)
-        p_p <- p_phys
-        p_m <- p_phys
-        p_p[[param_names[j]]] <- p_phys[[param_names[j]]] + dth
-        p_m[[param_names[j]]] <- p_phys[[param_names[j]]] - dth
-        J[, j] <- (self$func_rhs(y, t, p_p) - self$func_rhs(y, t, p_m)) / (2 * dth)
-      }
       J
     }
   )

@@ -101,7 +101,7 @@ describe("BVC3: optimize_bvp — gradient norm = 0 at solution", {
   obs_v  <- matrix(y_true + rnorm(length(times), sd = 0.05), ncol = 1L)
 
   solver <- DtOForwardSolver$new(
-    func_rhs   = f_lin,
+    model      = ODEModel$new(rhs = f_lin),
     times_sim  = times,
     obs_times  = times,
     obs_values = obs_v,
@@ -140,7 +140,7 @@ describe("BVC4: optimize_bvp vs optimize (BFGS) — trajectory agreement", {
 
   make_solver <- function() {
     DtOForwardSolver$new(
-      func_rhs   = f_lin,
+      model      = ODEModel$new(rhs = f_lin),
       times_sim  = times,
       obs_times  = times,
       obs_values = obs_v,

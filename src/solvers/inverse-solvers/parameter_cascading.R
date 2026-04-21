@@ -7,15 +7,13 @@ library(gridExtra)
 CascadingOdeSolver <- R6Class("CascadingOdeSolver",
   inherit = ParameterEstimatorBase,
   public = list(
-    initialize = function(func_rhs, times_sim, obs_times, obs_values,
-                          fixed_params, lambda, param_scales,
-                          init_state,
+    initialize = function(model, times_sim, obs_times, obs_values,
+                          lambda,
                           inner_max_iter = 200,
                           inner_reltol = sqrt(.Machine$double.eps),
                           inner_method = "gl2") {
-      self$initialize_estimator(func_rhs, times_sim, obs_times, obs_values,
-                                fixed_params, lambda, param_scales,
-                                init_state, inner_max_iter, inner_reltol,
+      self$initialize_estimator(model, times_sim, obs_times, obs_values,
+                                lambda, inner_max_iter, inner_reltol,
                                 inner_method)
     },
     
@@ -28,7 +26,7 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
         p_phys <- self$unpack_physical(theta_norm, param_names)
         y0_phys <- self$eval_init_state(p_phys)
         solver <- self$inner_solver_class$new(
-          func_rhs = self$func_rhs, times_sim = self$times_sim,
+          model = self$model, times_sim = self$times_sim,
           obs_times = self$obs_times, obs_values = self$obs_values,
           params = p_phys, lambda = self$lambda, method = self$inner_method
         )

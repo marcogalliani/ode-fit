@@ -41,8 +41,15 @@ describe("F1: FEMForwardSolver CN — gradient consistency (1-D decay)", {
   y0        <- 5.0
   y_true    <- matrix(y0 * exp(-params$k * times_sim), ncol = 1)
 
-  solver <- FEMForwardSolver$new(decay_rhs, times_sim, times_sim, y_true,
-                                 params, lambda = 0.05, method = "cn")
+  solver <- FEMForwardSolver$new(
+    model = ODEModel$new(rhs = decay_rhs),
+    times_sim = times_sim,
+    obs_times = times_sim,
+    obs_values = y_true,
+    params = params,
+    lambda = 0.05,
+    method = "cn"
+  )
   set.seed(1)
   u_test <- rnorm(solver$n_steps * solver$n_vars, sd = 0.05)
 
@@ -68,8 +75,15 @@ describe("F2: FEMForwardSolver GL2 — gradient consistency (2-D LV)", {
   set.seed(2)
   obs_lv    <- y_lv + matrix(rnorm(length(y_lv), 0, 0.5), nrow(y_lv), 2)
 
-  solver <- FEMForwardSolver$new(lv_rhs, times_sim, times_sim, obs_lv,
-                                 params, lambda = 0.1, method = "gl2")
+  solver <- FEMForwardSolver$new(
+    model = ODEModel$new(rhs = lv_rhs),
+    times_sim = times_sim,
+    obs_times = times_sim,
+    obs_values = obs_lv,
+    params = params,
+    lambda = 0.1,
+    method = "gl2"
+  )
   set.seed(3)
   u_test <- rnorm(solver$n_steps * solver$n_vars, sd = 0.05)
 
@@ -93,8 +107,15 @@ describe("F3: FEMForwardSolver GL1 — gradient consistency (1-D decay)", {
   y0        <- 5.0
   y_true    <- matrix(y0 * exp(-params$k * times_sim), ncol = 1)
 
-  solver <- FEMForwardSolver$new(decay_rhs, times_sim, times_sim, y_true,
-                                 params, lambda = 0.05, method = "gl1")
+  solver <- FEMForwardSolver$new(
+    model = ODEModel$new(rhs = decay_rhs),
+    times_sim = times_sim,
+    obs_times = times_sim,
+    obs_values = y_true,
+    params = params,
+    lambda = 0.05,
+    method = "gl1"
+  )
   set.seed(4)
   u_test <- rnorm(solver$n_steps * solver$n_vars, sd = 0.1)
 
@@ -120,8 +141,15 @@ describe("F4: Load-vector assembly — exact point evaluation", {
   obs       <- matrix(y0 * exp(-params$k * times_sim) + 0.1, ncol = 1)
   obs[c(3, 5), ] <- NA
 
-  solver <- FEMForwardSolver$new(decay_rhs, times_sim, times_sim, obs,
-                                 params, lambda = 0.1, method = "cn")
+  solver <- FEMForwardSolver$new(
+    model = ODEModel$new(rhs = decay_rhs),
+    times_sim = times_sim,
+    obs_times = times_sim,
+    obs_values = obs,
+    params = params,
+    lambda = 0.1,
+    method = "cn"
+  )
   u_zero <- rep(0, ns)
   solver$cost_function(u_zero, y0)
   L <- solver$get_load_vector()
@@ -158,10 +186,24 @@ describe("F5: FEMForwardSolver == DtOForwardSolver — identical gradients", {
       y_true    <- matrix(y0 * exp(-params$k * times_sim), ncol = 1)
       lam       <- 0.05
 
-      fem <- FEMForwardSolver$new(decay_rhs, times_sim, times_sim, y_true,
-                                  params, lam, method = m)
-      ode <- DtOForwardSolver$new(decay_rhs, times_sim, times_sim, y_true,
-                                  params, lam, method = m)
+      fem <- FEMForwardSolver$new(
+        model = ODEModel$new(rhs = decay_rhs),
+        times_sim = times_sim,
+        obs_times = times_sim,
+        obs_values = y_true,
+        params = params,
+        lambda = lam,
+        method = m
+      )
+      ode <- DtOForwardSolver$new(
+        model = ODEModel$new(rhs = decay_rhs),
+        times_sim = times_sim,
+        obs_times = times_sim,
+        obs_values = y_true,
+        params = params,
+        lambda = lam,
+        method = m
+      )
 
       set.seed(99)
       u_test <- rnorm(fem$n_steps, sd = 0.05)
@@ -193,8 +235,15 @@ describe("F6: Global K (CN) — K^T backward solve agrees with element-wise", {
   set.seed(5)
   obs <- matrix(y0 * exp(-params$k * times_sim) + rnorm(ns, 0, 0.05), ncol = 1)
 
-  solver <- FEMForwardSolver$new(decay_rhs, times_sim, times_sim, obs,
-                                 params, lambda = 0.1, method = "cn")
+  solver <- FEMForwardSolver$new(
+    model = ODEModel$new(rhs = decay_rhs),
+    times_sim = times_sim,
+    obs_times = times_sim,
+    obs_values = obs,
+    params = params,
+    lambda = 0.1,
+    method = "cn"
+  )
   set.seed(6)
   u_test <- rnorm(ns, sd = 0.05)
   solver$cost_function(u_test, y0)
@@ -227,8 +276,15 @@ describe("F7: FEMForwardSolver optimize() — cost strictly decreases", {
   obs_data  <- matrix(y0 * exp(-params$k * obs_times) + rnorm(length(obs_times), 0, 0.1),
                       ncol = 1)
 
-  solver      <- FEMForwardSolver$new(decay_rhs, times_sim, obs_times, obs_data,
-                                      params, lambda = 0.1, method = "gl2")
+  solver      <- FEMForwardSolver$new(
+    model = ODEModel$new(rhs = decay_rhs),
+    times_sim = times_sim,
+    obs_times = obs_times,
+    obs_values = obs_data,
+    params = params,
+    lambda = 0.1,
+    method = "gl2"
+  )
   u_zero      <- rep(0, solver$n_steps * solver$n_vars)
   cost_before <- solver$cost_function(u_zero, y0)
 

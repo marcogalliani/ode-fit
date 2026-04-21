@@ -15,7 +15,7 @@
 #   ├── GL1Scheme              — implicit midpoint / cG(1), order 2 (self-adjoint)
 #   └── GL2Scheme              — 2-stage Gauss-Legendre, order 4 (self-adjoint)
 #
-#   DtOSolver  — unified OCP solver wrapping any DtOScheme
+#   OCPDtOSolver  — unified OCP solver wrapping any DtOScheme
 #
 # Scheme interface:
 #   forward(rhs, y0, times, jac_fn, source_fn) -> list(y = ns*nv, aux)
@@ -429,32 +429,56 @@ GL2Scheme <- R6Class("GL2Scheme", inherit = DtOScheme,
 )
 
 # =============================================================================
-# DtOSolver — unified OCP solver wrapping any DtOScheme
+# OCPDtOSolver — unified OCP solver wrapping any DtOScheme
 #
 # Provides a uniform interface for forward and adjoint solves regardless
 # of the underlying discretization method.
 # =============================================================================
-DtOSolver <- R6Class("DtOSolver",
+OCPDtOSolver <- R6Class("OCPDtOSolver",
   private = list(scheme = NULL),
   public = list(
+    #' Initialize wrapper with a concrete DtOScheme instance
+    #' Purpose: bind a scheme that implements forward/adjoint/discrete-map API.
     initialize = function(scheme) {
       private$scheme <- scheme
     },
+
+    #' Solve state dynamics on a fixed grid
+    #' Input contract: rhs(y,t), y0 (nv), times (ns), optional jac_fn/source_fn.
+    #' Output: list(y = ns x nv, aux = scheme-dependent cache).
+    #' Side effect: scheme stores forward trajectory internally for adjoint calls.
     solve_state = function(rhs, y0, times, jac_fn = NULL, source_fn = NULL) {
       private$scheme$forward(rhs, y0, times, jac_fn, source_fn)
     },
+
+    #' Solve discrete adjoint associated with the current scheme forward map
+    #' Input contract: pT (terminal adjoint, length nv), optional jac_fn/source_fn.
+    #' Output: list(p = ns x nv, grad_contrib = ns x nv).
+    #' Precondition: solve_state() must have been called so scheme caches are set.
     solve_adjoint = function(rhs, pT, jac_fn = NULL, source_fn = NULL) {
       private$scheme$adjoint(rhs, pT, jac_fn, source_fn)
     },
+
+    #' Differentiate one-step discrete control map at index t_idx
+    #' Output fields:
+    #'   - Du_dyc: dU/dy_curr (nv x nv)
+    #'   - Du_dyn: dU/dy_next (nv x nv)
+    #'   - Du_dtheta: dU/dtheta (nv x np or NULL)
     differentiate_discrete_control_map = function(t_idx, jac_fn, param_jac_fn = NULL) {
       private$scheme$differentiate_discrete_control_map(t_idx, jac_fn, param_jac_fn)
     },
+
+    #' Convenience accessor for dU/dy_curr at step t_idx
     dcontrol_dy_curr = function(t_idx, jac_fn) {
       private$scheme$dcontrol_dy_curr(t_idx, jac_fn)
     },
+
+    #' Convenience accessor for dU/dy_next at step t_idx
     dcontrol_dy_next = function(t_idx, jac_fn) {
       private$scheme$dcontrol_dy_next(t_idx, jac_fn)
     },
+
+    #' Convenience accessor for dU/dtheta at step t_idx
     dcontrol_dtheta = function(t_idx, jac_fn, param_jac_fn = NULL) {
       private$scheme$dcontrol_dtheta(t_idx, jac_fn, param_jac_fn)
     }
@@ -475,7 +499,7 @@ make_dto_scheme <- function(method) {
 }
 
 make_dto_solver <- function(method) {
-  DtOSolver$new(make_dto_scheme(method))
+  OCPDtOSolver$new(make_dto_scheme(method))
 }
 
 make_ode_solver <- make_dto_solver

@@ -34,14 +34,12 @@ SqpOcpSolver <- R6Class("SqpOcpSolver",
     w_trap    = NULL,
 
     get_jacobian = function(y_vec, t_val) {
-      n   <- length(y_vec)
-      J   <- matrix(0, n, n)
-      eps <- 1e-7
-      for (j in seq_len(n)) {
-        y_p <- y_vec; y_p[j] <- y_p[j] + eps
-        y_m <- y_vec; y_m[j] <- y_m[j] - eps
-        J[, j] <- (self$func_rhs(y_p, t_val, self$params) -
-                   self$func_rhs(y_m, t_val, self$params)) / (2 * eps)
+      J <- self$model$jacobian_state(y_vec, t_val, self$params)
+      if (is.null(dim(J))) {
+        J <- matrix(J, nrow = length(y_vec), ncol = length(y_vec))
+      }
+      if (nrow(J) != length(y_vec) || ncol(J) != length(y_vec)) {
+        stop("jacobian_state must return an nv x nv matrix")
       }
       J
     },
@@ -57,7 +55,7 @@ SqpOcpSolver <- R6Class("SqpOcpSolver",
 
       for (t in seq_len(ns - 1L)) {
         f_t <- if (!is.null(f_cache)) f_cache[[t]]
-               else self$func_rhs(y[t, ], self$times_sim[t], self$params)
+           else self$model$rhs(y[t, ], self$times_sim[t], self$params)
         J_t <- if (!is.null(J_cache)) J_cache[[t]]
                else private$get_jacobian(y[t, ], self$times_sim[t])
 
@@ -83,16 +81,20 @@ SqpOcpSolver <- R6Class("SqpOcpSolver",
   ),
 
   public = list(
-    func_rhs  = NULL, params = NULL, lambda = NULL,
+    model = NULL, params = NULL, lambda = NULL,
     times_sim = NULL, n_steps = NULL, dt_vec = NULL, n_vars = NULL,
     y0 = NULL,
 
     observations_mapped = NULL,
     y = NULL, u = NULL, p = NULL,
 
-    initialize = function(func_rhs, times_sim, obs_times, obs_values,
+    initialize = function(model, times_sim, obs_times, obs_values,
                           params, lambda, y0) {
-      self$func_rhs <- func_rhs
+      if (is.null(model) || !inherits(model, "ODEModel")) {
+        stop("model must be an ODEModel instance")
+      }
+
+      self$model <- model
       obs_times  <- round(obs_times, digits = 10)
       times_sim  <- sort(unique(round(c(times_sim, obs_times), digits = 10)))
       self$times_sim <- times_sim
@@ -150,7 +152,7 @@ SqpOcpSolver <- R6Class("SqpOcpSolver",
 
       # --- initial guess: Euler forward (u=0) + consistent adjoint ---
       dto     <- make_dto_solver("euler")
-      rhs_fwd <- function(y, t) self$func_rhs(y, t, self$params)
+      rhs_fwd <- function(y, t) self$model$rhs(y, t, self$params)
       jac_fn  <- function(y, t) private$get_jacobian(y, t)
 
       y_curr <- dto$solve_state(rhs_fwd, y0, self$times_sim, jac_fn)$y
@@ -171,7 +173,7 @@ SqpOcpSolver <- R6Class("SqpOcpSolver",
         f_cache <- vector("list", ns - 1L)
         for (t in seq_len(ns - 1L)) {
           J_cache[[t]] <- private$get_jacobian(y_curr[t, ], self$times_sim[t])
-          f_cache[[t]] <- self$func_rhs(y_curr[t, ], self$times_sim[t], self$params)
+          f_cache[[t]] <- self$model$rhs(y_curr[t, ], self$times_sim[t], self$params)
         }
 
         res   <- private$kkt_residuals(y_curr, u_curr, p_curr, J_cache, f_cache)

@@ -92,15 +92,19 @@ describe("Outer gradient consistency — deterministic Lotka-Volterra (all param
   y_true <- euler_solve(lv_rhs, y0_true, obs_times, as.list(p_true))
   obs_data <- y_true
 
+  model <- ODEModel$new(
+    rhs = lv_rhs,
+    init_state = function(p) y0_true,
+    fixed_params = list(x0 = y0_true[1], y0 = y0_true[2]),
+    param_scales = param_scales
+  )
+
   cascading <- CascadingOdeSolver$new(
-    func_rhs     = lv_rhs,
+    model        = model,
     times_sim    = times_sim,
     obs_times    = obs_times,
     obs_values   = obs_data,
-    init_state   = function(p) y0_true,
-    fixed_params = list(),
     lambda       = 1.0,
-    param_scales = param_scales,
     inner_method = "gl2"
   )
 

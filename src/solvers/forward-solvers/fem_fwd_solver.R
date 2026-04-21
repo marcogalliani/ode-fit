@@ -122,10 +122,10 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
       elem <- vector("list", ns - 1L)
       for (t in seq_len(ns - 1L)) {
         h  <- dt[t]
-        ft <- self$func_rhs(y[t, ], times[t], self$params) + u_mat[t, ]
+        ft <- self$model$rhs(y[t, ], times[t], self$params) + u_mat[t, ]
         yn <- y[t, ] + h * ft
         for (k in seq_len(10L)) {
-          fn  <- self$func_rhs(yn, times[t + 1L], self$params) + u_mat[t + 1L, ]
+          fn  <- self$model$rhs(yn, times[t + 1L], self$params) + u_mat[t + 1L, ]
           res <- yn - y[t, ] - (h / 2) * (ft + fn)
           if (max(abs(res)) < 1e-12) break
           J_r <- self$get_jacobian(yn, times[t + 1L])
@@ -157,9 +157,9 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
         h     <- dt[t]
         t_mid <- (times[t] + times[t + 1L]) / 2
         u_mid <- u_mat[t, ]   # floor interpolation: consistent with u_fn(t_mid) in solve_gl1
-        ym    <- y[t, ] + (h / 2) * (self$func_rhs(y[t, ], t_mid, self$params) + u_mid)
+        ym    <- y[t, ] + (h / 2) * (self$model$rhs(y[t, ], t_mid, self$params) + u_mid)
         for (k in seq_len(10L)) {
-          fn  <- self$func_rhs(ym, t_mid, self$params) + u_mid
+          fn  <- self$model$rhs(ym, t_mid, self$params) + u_mid
           res <- ym - y[t, ] - (h / 2) * fn
           if (max(abs(res)) < 1e-12) break
           Jm  <- self$get_jacobian(ym, t_mid)
@@ -194,12 +194,12 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
         h   <- dt[t]; yt <- y[t, ]
         t1  <- times[t] + .gl2_c1 * h; t2 <- times[t] + .gl2_c2 * h
         us  <- u_mat[t, ]
-        K1  <- self$func_rhs(yt, times[t], self$params) + us; K2 <- K1
+        K1  <- self$model$rhs(yt, times[t], self$params) + us; K2 <- K1
         for (k in seq_len(15L)) {
           Y1  <- yt + h * (.gl2_A11 * K1 + .gl2_A12 * K2)
           Y2  <- yt + h * (.gl2_A21 * K1 + .gl2_A22 * K2)
-          f1  <- self$func_rhs(Y1, t1, self$params) + us
-          f2  <- self$func_rhs(Y2, t2, self$params) + us
+          f1  <- self$model$rhs(Y1, t1, self$params) + us
+          f2  <- self$model$rhs(Y2, t2, self$params) + us
           G1  <- K1 - f1; G2 <- K2 - f2; res <- c(G1, G2)
           if (max(abs(res)) < 1e-12) break
           Jf1    <- self$get_jacobian(Y1, t1); Jf2 <- self$get_jacobian(Y2, t2)
@@ -221,15 +221,19 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
   ),
 
   public = list(
-    func_rhs = NULL, params = NULL, lambda_reg = NULL,
+    model = NULL, params = NULL, lambda_reg = NULL,
     times_sim = NULL, n_steps = NULL, dt_vec = NULL, n_vars = NULL,
     method = NULL,
     observations_mapped = NULL,
     y = NULL, u = NULL, p = NULL,
 
-    initialize = function(func_rhs, times_sim, obs_times, obs_values,
+    initialize = function(model, times_sim, obs_times, obs_values,
                           params, lambda, method = "gl2") {
-      self$func_rhs  <- func_rhs
+      if (is.null(model) || !inherits(model, "ODEModel")) {
+        stop("model must be an ODEModel instance")
+      }
+
+      self$model  <- model
       obs_times  <- round(obs_times,  digits = 10)
       times_sim  <- sort(unique(round(c(times_sim, obs_times), digits = 10)))
       self$times_sim  <- times_sim
@@ -248,12 +252,12 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
     },
 
     get_jacobian = function(y_vec, t_val) {
-      n <- length(y_vec); J <- matrix(0, n, n); eps <- 1e-7
-      for (j in seq_len(n)) {
-        yp <- y_vec; yp[j] <- yp[j] + eps
-        ym <- y_vec; ym[j] <- ym[j] - eps
-        J[, j] <- (self$func_rhs(yp, t_val, self$params) -
-                   self$func_rhs(ym, t_val, self$params)) / (2 * eps)
+      J <- self$model$jacobian_state(y_vec, t_val, self$params)
+      if (is.null(dim(J))) {
+        J <- matrix(J, nrow = length(y_vec), ncol = length(y_vec))
+      }
+      if (nrow(J) != length(y_vec) || ncol(J) != length(y_vec)) {
+        stop("jacobian_state must return an nv x nv matrix")
       }
       J
     },

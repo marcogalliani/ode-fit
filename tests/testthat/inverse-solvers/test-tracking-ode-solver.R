@@ -107,15 +107,19 @@ describe("TR1: Outer gradient consistency — deterministic Lotka-Volterra param
   y_true <- euler_solve(lv_rhs, unlist(p_true[c("x0", "y0")]), times_sim, as.list(p_true))
   obs_data <- y_true[which(times_sim %in% obs_times), , drop = FALSE]
 
+  model <- ODEModel$new(
+    rhs = lv_rhs,
+    init_state = function(p) as.numeric(c(p$x0, p$y0)),
+    fixed_params = list(),
+    param_scales = param_scales
+  )
+
   tracking <- TrackingOdeSolver$new(
-    func_rhs     = lv_rhs,
+    model        = model,
     times_sim    = times_sim,
     obs_times    = obs_times,
     obs_values   = obs_data,
-    init_state   = function(p) as.numeric(c(p$x0, p$y0)),
-    fixed_params = list(),
     lambda       = 1e2,
-    param_scales = param_scales,
     inner_method = "gl1"
   )
 
@@ -176,15 +180,19 @@ describe("TR1a: Outer gradient consistency — deterministic fixed initial condi
   y_true <- euler_solve(lv_rhs, unlist(p_data[c("x0", "y0")]), times_sim, p_data)
   obs_data <- y_true[which(times_sim %in% obs_times), , drop = FALSE]
 
+  model <- ODEModel$new(
+    rhs = lv_rhs,
+    init_state = function(p) as.numeric(c(10, 10)),
+    fixed_params = list(x0 = 10, y0 = 10),
+    param_scales = param_scales
+  )
+
   tracking <- TrackingOdeSolver$new(
-    func_rhs     = lv_rhs,
+    model        = model,
     times_sim    = times_sim,
     obs_times    = obs_times,
     obs_values   = obs_data,
-    init_state   = function(p) as.numeric(c(10, 10)),
-    fixed_params = list(),
     lambda       = 1e2,
-    param_scales = param_scales,
     inner_method = "gl2"
   )
 

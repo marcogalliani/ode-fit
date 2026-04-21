@@ -45,13 +45,13 @@ describe("SQP1: 1-D decay — convergence and cost reduction", {
   obs_data <- y_true + matrix(rnorm(length(y_true), 0, 0.1), nrow(y_true), 1)
 
   sqp <- SqpOcpSolver$new(
-    func_rhs = .sqp_decay_rhs, times_sim = times_sim,
+    model = ODEModel$new(rhs = .sqp_decay_rhs), times_sim = times_sim,
     obs_times = times_sim, obs_values = obs_data,
     params = params, lambda = 0.1, y0 = y0
   )
 
   ref <- DtOForwardSolver$new(
-    func_rhs = .sqp_decay_rhs, times_sim = times_sim,
+    model = ODEModel$new(rhs = .sqp_decay_rhs), times_sim = times_sim,
     obs_times = times_sim, obs_values = obs_data,
     params = params, lambda = 0.1, method = "euler"
   )
@@ -82,14 +82,14 @@ describe("SQP2: 1-D decay — SQP vs BFGS trajectory agreement", {
   obs_data <- y_true + matrix(rnorm(length(y_true), 0, 0.1), nrow(y_true), 1)
 
   sqp <- SqpOcpSolver$new(
-    func_rhs = .sqp_decay_rhs, times_sim = times_sim,
+    model = ODEModel$new(rhs = .sqp_decay_rhs), times_sim = times_sim,
     obs_times = times_sim, obs_values = obs_data,
     params = params, lambda = 0.1, y0 = y0
   )
   sqp$solve(max_iter = 50, tol = 1e-8)
 
   ref <- DtOForwardSolver$new(
-    func_rhs = .sqp_decay_rhs, times_sim = times_sim,
+    model = ODEModel$new(rhs = .sqp_decay_rhs), times_sim = times_sim,
     obs_times = times_sim, obs_values = obs_data,
     params = params, lambda = 0.1, method = "euler"
   )
@@ -124,14 +124,14 @@ describe("SQP3: 2-D Lotka-Volterra — convergence and BFGS agreement", {
   obs_data <- y_lv + matrix(rnorm(length(y_lv), 0, 0.5), nrow(y_lv), 2)
 
   sqp <- SqpOcpSolver$new(
-    func_rhs = .sqp_lv_rhs, times_sim = times_sim,
+    model = ODEModel$new(rhs = .sqp_lv_rhs), times_sim = times_sim,
     obs_times = times_sim, obs_values = obs_data,
     params = params, lambda = 0.1, y0 = y0
   )
   sol <- sqp$solve(max_iter = 50, tol = 1e-6)
 
   ref <- DtOForwardSolver$new(
-    func_rhs = .sqp_lv_rhs, times_sim = times_sim,
+    model = ODEModel$new(rhs = .sqp_lv_rhs), times_sim = times_sim,
     obs_times = times_sim, obs_values = obs_data,
     params = params, lambda = 0.1, method = "euler"
   )
@@ -164,7 +164,7 @@ describe("SQP4: state recovery — u* ~ 0 with exact physics", {
   y_true    <- .sqp_euler(.sqp_decay_rhs, y0, times_sim, params)
 
   sqp <- SqpOcpSolver$new(
-    func_rhs = .sqp_decay_rhs, times_sim = times_sim,
+    model = ODEModel$new(rhs = .sqp_decay_rhs), times_sim = times_sim,
     obs_times = times_sim, obs_values = y_true,
     params = params, lambda = 1.0, y0 = y0
   )
@@ -195,7 +195,7 @@ describe("SQP5: NA handling — missing observations", {
   y_obs[gap_idx, ] <- NA
 
   sqp <- SqpOcpSolver$new(
-    func_rhs = .sqp_decay_rhs, times_sim = times_sim,
+    model = ODEModel$new(rhs = .sqp_decay_rhs), times_sim = times_sim,
     obs_times = times_sim, obs_values = y_obs,
     params = params, lambda = 0.1, y0 = y0
   )
