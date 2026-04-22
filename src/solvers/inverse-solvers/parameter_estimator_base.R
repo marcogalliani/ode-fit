@@ -9,6 +9,7 @@ ParameterEstimatorBase <- R6Class("ParameterEstimatorBase",
     init_state = NULL,
     n_vars = NULL,
     inner_max_iter = NULL, inner_reltol = NULL, inner_method = NULL,
+    verbose = FALSE,
 
     last_theta = NULL,
     last_solver = NULL,
@@ -16,10 +17,11 @@ ParameterEstimatorBase <- R6Class("ParameterEstimatorBase",
     history = NULL,
 
     initialize_estimator = function(model, times_sim, obs_times, obs_values,
-                                    lambda,
-                                    inner_max_iter = 200,
-                                    inner_reltol = sqrt(.Machine$double.eps),
-                                    inner_method = "gl2") {
+                    lambda,
+                    inner_max_iter = 200,
+                    inner_reltol = sqrt(.Machine$double.eps),
+                    inner_method = "gl2",
+                    verbose = FALSE) {
       if (is.null(model) || !inherits(model, "ODEModel")) {
         stop("model must be an ODEModel instance")
       }
@@ -37,11 +39,26 @@ ParameterEstimatorBase <- R6Class("ParameterEstimatorBase",
       self$lambda <- lambda
       self$inner_solver_class <- DtOForwardSolver
       self$inner_method <- inner_method
+      self$verbose <- isTRUE(verbose)
       self$param_scales <- model$param_scales
       self$init_state <- function(params_phys) self$model$init_state(params_phys)
       self$inner_max_iter <- inner_max_iter
       self$inner_reltol <- inner_reltol
       self$history <- list()
+    },
+
+    log_info = function(fmt, ...) {
+      if (!isTRUE(self$verbose)) return(invisible(NULL))
+      message(sprintf(paste0("[", class(self)[1], "] ", fmt), ...))
+      invisible(NULL)
+    },
+
+    log_iter = function(iter, metric_name, metric_value, params_named) {
+      if (!isTRUE(self$verbose)) return(invisible(NULL))
+      params_str <- paste(sprintf("%s=%.6g", names(params_named), params_named), collapse = ", ")
+      message(sprintf("[%s][iter=%03d] %s=%.6e | %s",
+                      class(self)[1], iter, metric_name, metric_value, params_str))
+      invisible(NULL)
     },
 
     infer_n_vars = function(obs_values) {

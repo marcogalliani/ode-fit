@@ -94,6 +94,12 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
     cache_lambda       = NULL,
     cache_grad_contrib = NULL,
 
+    log_debug = function(fmt, ...) {
+      if (!isTRUE(self$verbose)) return(invisible(NULL))
+      message(sprintf(paste0("[FEMForwardSolver] ", fmt), ...))
+      invisible(NULL)
+    },
+
     # ------------------------------------------------------------------
     # Load vector L = E^T r  (exact point evaluation, no quadrature).
     # L[n,] = (2/ns)(y_n − obs_n); NA observations contribute 0.
@@ -224,11 +230,12 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
     model = NULL, params = NULL, lambda_reg = NULL,
     times_sim = NULL, n_steps = NULL, dt_vec = NULL, n_vars = NULL,
     method = NULL,
+    verbose = FALSE,
     observations_mapped = NULL,
     y = NULL, u = NULL, p = NULL,
 
     initialize = function(model, times_sim, obs_times, obs_values,
-                          params, lambda, method = "gl2") {
+                          params, lambda, method = "gl2", verbose = FALSE) {
       if (is.null(model) || !inherits(model, "ODEModel")) {
         stop("model must be an ODEModel instance")
       }
@@ -243,6 +250,7 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
       self$n_vars     <- ncol(obs_values)
       self$dt_vec     <- c(diff(times_sim), 0)
       self$method     <- method
+      self$verbose    <- isTRUE(verbose)
 
       self$observations_mapped <- matrix(NA, self$n_steps, self$n_vars)
       self$observations_mapped[times_sim %in% obs_times, ] <- obs_values
@@ -420,7 +428,8 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
     },
 
     optimize = function(y0, max_iter = 100, u_init = NULL,
-                        reltol = sqrt(.Machine$double.eps)) {
+                        reltol = sqrt(.Machine$double.eps), verbose = NULL) {
+      if (is.null(verbose)) verbose <- self$verbose
       if (is.null(u_init)) u_init <- rep(0, self$n_steps * self$n_vars)
       if (length(y0) == 1 && is.na(y0)) {
         first_row <- which(!is.na(self$observations_mapped[, 1]))[1]
@@ -433,11 +442,15 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
           }
         }
       }
+      private$log_debug("Starting optimization: method=%s max_iter=%d reltol=%.3e",
+            self$method, max_iter, reltol)
       res <- optim(par = u_init,
                    fn  = self$cost_function,
                    gr  = self$gradient_function,
                    y0  = y0, method = "BFGS",
-                   control = list(maxit = max_iter, reltol = reltol, trace = 1))
+           control = list(maxit = max_iter,
+                  reltol = reltol,
+                  trace = if (isTRUE(verbose)) 1 else 0))
       self$u <- matrix(res$par, self$n_steps, self$n_vars)
       if (!is.null(private$cache_y)) {
         self$y <- private$cache_y; self$p <- private$cache_lambda
@@ -445,6 +458,8 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
         sol    <- self$solve_forward_adjoint(self$u, y0)
         self$y <- sol$y; self$p <- sol$lambda
       }
+      private$log_debug("Optimization complete: converged_code=%d final_value=%.6e",
+                        res$convergence, res$value)
       res
     }
   )

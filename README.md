@@ -1,5 +1,5 @@
 <!-- badges: start -->
-[![R-CMD-check](https://github.com/marcogalliani/ode-fit/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/marcogalliani/ode-fit/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/marcogalliani/ode-fit/actions/workflows/tests.yaml/badge.svg)](https://github.com/marcogalliani/ode-fit/actions/workflows/tests.yaml)
 <!-- badges: end -->
 
 # Physics-Informed smoothing 

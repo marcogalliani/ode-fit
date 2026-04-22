@@ -33,6 +33,12 @@ SqpOcpSolver <- R6Class("SqpOcpSolver",
     obs_mask  = NULL,
     w_trap    = NULL,
 
+    log_debug = function(fmt, ...) {
+      if (!isTRUE(self$verbose)) return(invisible(NULL))
+      message(sprintf(paste0("[SqpOcpSolver] ", fmt), ...))
+      invisible(NULL)
+    },
+
     get_jacobian = function(y_vec, t_val) {
       J <- self$model$jacobian_state(y_vec, t_val, self$params)
       if (is.null(dim(J))) {
@@ -84,12 +90,13 @@ SqpOcpSolver <- R6Class("SqpOcpSolver",
     model = NULL, params = NULL, lambda = NULL,
     times_sim = NULL, n_steps = NULL, dt_vec = NULL, n_vars = NULL,
     y0 = NULL,
+    verbose = FALSE,
 
     observations_mapped = NULL,
     y = NULL, u = NULL, p = NULL,
 
     initialize = function(model, times_sim, obs_times, obs_values,
-                          params, lambda, y0) {
+                params, lambda, y0, verbose = FALSE) {
       if (is.null(model) || !inherits(model, "ODEModel")) {
         stop("model must be an ODEModel instance")
       }
@@ -104,6 +111,7 @@ SqpOcpSolver <- R6Class("SqpOcpSolver",
       self$n_vars    <- ncol(obs_values)
       self$dt_vec    <- c(diff(times_sim), 0)
       self$y0        <- y0
+      self$verbose   <- isTRUE(verbose)
 
       self$observations_mapped <- matrix(NA, self$n_steps, self$n_vars)
       self$observations_mapped[times_sim %in% obs_times, ] <- obs_values
@@ -121,7 +129,8 @@ SqpOcpSolver <- R6Class("SqpOcpSolver",
       self$p <- matrix(0, self$n_steps, self$n_vars)
     },
 
-    solve = function(max_iter = 50L, tol = 1e-8, verbose = FALSE) {
+    solve = function(max_iter = 50L, tol = 1e-8, verbose = NULL) {
+      if (is.null(verbose)) verbose <- self$verbose
       ns  <- self$n_steps; ny <- self$n_vars
       h   <- self$dt_vec[seq_len(ns - 1L)]
       lam <- self$lambda
@@ -168,6 +177,7 @@ SqpOcpSolver <- R6Class("SqpOcpSolver",
       converged <- FALSE
       kkt_n <- Inf
 
+      private$log_debug("Starting SQP solve: max_iter=%d tol=%.3e", max_iter, tol)
       for (iter in seq_len(max_iter)) {
         J_cache <- vector("list", ns - 1L)
         f_cache <- vector("list", ns - 1L)
@@ -179,8 +189,9 @@ SqpOcpSolver <- R6Class("SqpOcpSolver",
         res   <- private$kkt_residuals(y_curr, u_curr, p_curr, J_cache, f_cache)
         kkt_n <- private$kkt_norm(res)
 
-        if (verbose)
-          cat(sprintf("  [SQP] iter %2d  |KKT|_inf = %.3e\n", iter, kkt_n))
+        if (isTRUE(verbose)) {
+          message(sprintf("[SqpOcpSolver][iter=%02d] kkt_inf=%.3e", iter, kkt_n))
+        }
         if (kkt_n < tol) { converged <- TRUE; break }
 
         # --- assemble linearised KKT system ---
@@ -243,6 +254,9 @@ SqpOcpSolver <- R6Class("SqpOcpSolver",
       }
 
       self$y <- y_curr; self$u <- u_curr; self$p <- p_curr
+
+      private$log_debug("SQP finished: converged=%s iter=%d kkt_inf=%.3e",
+                        converged, iter, kkt_n)
 
       list(converged = converged, iter = iter, kkt_norm = kkt_n)
     },

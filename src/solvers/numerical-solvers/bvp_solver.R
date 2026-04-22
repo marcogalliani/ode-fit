@@ -223,11 +223,16 @@ solve_bvp_colloc <- function(F_rhs, bc_residual, t_grid, z_init,
   converged  <- FALSE
   iter_final <- max_iter
 
+  if (isTRUE(verbose)) {
+    message(sprintf("[BVP][collocation] start max_iter=%d tol=%.3e", max_iter, tol))
+  }
+
   for (iter in seq_len(max_iter)) {
     R0       <- build_R(z_flat)
     res_norm <- max(abs(R0))
-    if (verbose)
-      cat(sprintf("  [BVP colloc] iter %2d  |R|_inf = %.3e\n", iter, res_norm))
+    if (isTRUE(verbose)) {
+      message(sprintf("[BVP][collocation][iter=%02d] residual_inf=%.3e", iter, res_norm))
+    }
     if (res_norm < tol) { converged <- TRUE; iter_final <- iter; break }
 
     J_mat <- build_J(z_flat)
@@ -245,10 +250,16 @@ solve_bvp_colloc <- function(F_rhs, bc_residual, t_grid, z_init,
     z_flat <- z_flat + step * dz
   }
 
+  final_residual <- max(abs(build_R(z_flat)))
+  if (isTRUE(verbose)) {
+    message(sprintf("[BVP][collocation] done converged=%s iter=%d residual_inf=%.3e",
+                    converged, iter_final, final_residual))
+  }
+
   list(
     z             = matrix(z_flat, ns, nz, byrow = TRUE),
     converged     = converged,
     iter          = iter_final,
-    residual_norm = max(abs(build_R(z_flat)))
+    residual_norm = final_residual
   )
 }

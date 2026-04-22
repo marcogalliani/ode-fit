@@ -13,10 +13,11 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
                           lambda,
                           inner_max_iter = 200,
                           inner_reltol   = sqrt(.Machine$double.eps),
-                          inner_method   = "gl2") {
+              inner_method   = "gl2",
+              verbose        = FALSE) {
       self$initialize_estimator(model, times_sim, obs_times, obs_values,
                                 lambda, inner_max_iter, inner_reltol,
-                                inner_method)
+                inner_method, verbose)
     },
 
     # =========================================================================
@@ -38,12 +39,14 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
           obs_values = self$obs_values,
           params     = p_phys,
           lambda     = self$lambda,
-          method     = self$inner_method
+          method     = self$inner_method,
+          verbose    = FALSE
         )
         solver$optimize(y0       = y0_phys,
                         u_init   = NULL,
                         max_iter = self$inner_max_iter,
-                        reltol   = self$inner_reltol)
+                        reltol   = self$inner_reltol,
+                        verbose  = FALSE)
 
         self$last_u      <- as.vector(solver$u)
         self$last_theta  <- theta_norm
@@ -67,8 +70,8 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
       j_val  <- solver$cost_function(as.vector(solver$u), y0_eff)
 
       p_vals <- theta_norm * self$get_scales_vector(param_names)
-      cat(sprintf("Iter | Params: %s | J: %.4f\n",
-                  paste(round(p_vals, 2), collapse = ","), j_val))
+      self$log_iter(length(self$history), "J", j_val,
+                    setNames(p_vals, param_names))
       return(j_val)
     },
 
@@ -191,8 +194,11 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
 
       self$history <- list()
 
-      cat("=== Starting Constrained Parameter Tracking (L-BFGS-B) ===\n")
-      cat("Initial Guess (Norm):", round(init_theta_norm, 4), "\n")
+      self$log_info("Starting constrained parameter tracking (L-BFGS-B)")
+      if (isTRUE(self$verbose)) {
+        self$log_info("Initial guess (normalized): %s",
+                      paste(sprintf("%.6g", init_theta_norm), collapse = ", "))
+      }
 
       old_warn <- getOption("warn")
       options(warn = 0)
@@ -208,13 +214,17 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
         method      = "L-BFGS-B",
         lower       = lower_norm,
         upper       = upper_norm,
-        control     = list(maxit = 30, factr = 1e12, trace = 1)
+        control     = list(maxit = 30,
+                           factr = 1e12,
+                           trace = if (isTRUE(self$verbose)) 1 else 0)
       )
 
       final_params <- res$par * scales
       names(final_params) <- param_names
-      cat("\n=== Optimization Complete ===\n")
-      print(final_params)
+      self$log_info("Optimization complete: convergence=%d value=%.6e",
+                    res$convergence, res$value)
+      self$log_info("Estimated parameters: %s",
+                    paste(sprintf("%s=%.6g", names(final_params), final_params), collapse = ", "))
       return(final_params)
     }
   )

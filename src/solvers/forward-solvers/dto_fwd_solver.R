@@ -28,6 +28,12 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
     cache_p            = NULL,
     cache_grad_contrib = NULL,
 
+    log_debug = function(fmt, ...) {
+      if (!isTRUE(self$verbose)) return(invisible(NULL))
+      message(sprintf(paste0("[DtOForwardSolver] ", fmt), ...))
+      invisible(NULL)
+    },
+
     # source_fn(t_idx) = (2/ns) * (y[t] - obs[t]),  NA obs -> 0
     make_source_fn = function(y_curr) {
       ns  <- self$n_steps
@@ -44,12 +50,14 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
     model = NULL, params = NULL, lambda = NULL,
     times_sim = NULL, n_steps = NULL, dt_vec = NULL, n_vars = NULL,
     method = NULL,
+    verbose = FALSE,
 
     observations_mapped = NULL,
     y = NULL, u = NULL, p = NULL,
 
     #' Initialize DtOForwardSolver runtime state.
-    initialize = function(model, times_sim, obs_times, obs_values, params, lambda, method = "gl2") {
+    initialize = function(model, times_sim, obs_times, obs_values, params, lambda,
+                          method = "gl2", verbose = FALSE) {
       if (is.null(model) || !inherits(model, "ODEModel")) {
         stop("model must be an ODEModel instance")
       }
@@ -64,6 +72,7 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       self$n_vars    <- ncol(obs_values)
       self$dt_vec    <- c(diff(times_sim), 0)
       self$method    <- method
+      self$verbose   <- isTRUE(verbose)
       private$dto_solver <- make_dto_solver(method)
 
       self$observations_mapped <- matrix(NA, nrow = self$n_steps, ncol = self$n_vars)
@@ -283,8 +292,9 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
     },
 
     optimize_bvp = function(y0, z_init = NULL,
-                            max_iter = 50L, tol = 1e-8, verbose = FALSE) {
+                            max_iter = 50L, tol = 1e-8, verbose = NULL) {
       ns <- self$n_steps; ny <- self$n_vars
+      if (is.null(verbose)) verbose <- self$verbose
       jac_fn <- function(y, t) self$model$jacobian_state(y, t, self$params)
 
       if (length(y0) == 1L && is.na(y0)) {
@@ -351,7 +361,8 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
     },
 
     optimize = function(y0, max_iter = 100, u_init = NULL,
-                        reltol = sqrt(.Machine$double.eps)) {
+                        reltol = sqrt(.Machine$double.eps), verbose = NULL) {
+      if (is.null(verbose)) verbose <- self$verbose
       if (is.null(u_init)) u_init <- rep(0, self$n_steps * self$n_vars)
 
       if (length(y0) == 1 && is.na(y0)) {
@@ -366,9 +377,13 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
         }
       }
 
+      private$log_debug("Starting optimization: method=%s max_iter=%d reltol=%.3e",
+            self$method, max_iter, reltol)
       res <- optim(par = u_init, fn = self$cost_function, gr = self$gradient_function,
                    y0 = y0, method = "BFGS",
-                   control = list(maxit = max_iter, reltol = reltol, trace = 1))
+           control = list(maxit = max_iter,
+                  reltol = reltol,
+                  trace = if (isTRUE(verbose)) 1 else 0))
 
       self$u <- matrix(res$par, self$n_steps, self$n_vars)
       if (!is.null(private$cache_y)) {
@@ -377,6 +392,8 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
         sol <- self$solve_state_adjoint(self$u, y0)
         self$y <- sol$y; self$p <- sol$p
       }
+      private$log_debug("Optimization complete: converged_code=%d final_value=%.6e",
+                        res$convergence, res$value)
       res
     }
   )

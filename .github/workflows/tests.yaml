@@ -12,6 +12,8 @@ permissions: read-all
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    container: rocker/tidyverse:latest
     
     steps:
       - name: Checkout repository
@@ -23,7 +25,7 @@ jobs:
           use-public-rspm: true # Speeds up package installation on Linux
 
       - name: Install dependencies
-        run: Rscript -e 'install.packages(c("testthat", "reshape2", "dplyr", "tidyr", "stringr", "R6", "ggplot2", "gridExtra"))'
+        run: install2.r --error --skipinstalled testthat reshape2 gridExtra
 
       - name: Run tests
         # This tells testthat to run all scripts inside the "tests" folder

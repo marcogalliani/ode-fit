@@ -11,10 +11,11 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
                           lambda,
                           inner_max_iter = 200,
                           inner_reltol = sqrt(.Machine$double.eps),
-                          inner_method = "gl2") {
+              inner_method = "gl2",
+              verbose = FALSE) {
       self$initialize_estimator(model, times_sim, obs_times, obs_values,
                                 lambda, inner_max_iter, inner_reltol,
-                                inner_method)
+                inner_method, verbose)
     },
     
     # 1. Outer Objective
@@ -28,11 +29,14 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
         solver <- self$inner_solver_class$new(
           model = self$model, times_sim = self$times_sim,
           obs_times = self$obs_times, obs_values = self$obs_values,
-          params = p_phys, lambda = self$lambda, method = self$inner_method
+          params = p_phys, lambda = self$lambda, method = self$inner_method,
+          verbose = FALSE
         )
         
         solver$optimize(y0 = y0_phys, u_init = NULL, #self$last_u,
-                        max_iter = self$inner_max_iter, reltol = self$inner_reltol)
+                        max_iter = self$inner_max_iter,
+                        reltol = self$inner_reltol,
+                        verbose = FALSE)
 
         self$last_u     <- as.vector(solver$u)   # save for next warm start
         self$last_theta <- theta_norm
@@ -56,7 +60,8 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
 
       # Log output
       p_vals <- theta_norm * self$get_scales_vector(param_names)
-      cat(sprintf("Iter | Params: %s | SSE: %.4f\n", paste(round(p_vals, 2), collapse=","), sse))
+      self$log_iter(length(self$history), "SSE", sse,
+                    setNames(p_vals, param_names))
 
       return(sse)
     },
@@ -214,8 +219,11 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
       
       self$history <- list()   # reset trace for this run
 
-      cat("=== Starting Constrained Parameter Cascading (L-BFGS-B) ===\n")
-      cat("Initial Guess (Norm):", round(init_theta_norm, 4), "\n")
+      self$log_info("Starting constrained parameter cascading (L-BFGS-B)")
+      if (isTRUE(self$verbose)) {
+        self$log_info("Initial guess (normalized): %s",
+                      paste(sprintf("%.6g", init_theta_norm), collapse = ", "))
+      }
 
       old_warn <- getOption("warn")
       options(warn = 0)
@@ -231,8 +239,8 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
         lower = lower_norm,
         upper = upper_norm,
         control = list(
-          maxit = 50, 
-          trace = 1     # Set to 1 to monitor convergence in the console
+          maxit = 50,
+          trace = if (isTRUE(self$verbose)) 1 else 0
         )
       )
       
@@ -240,8 +248,10 @@ CascadingOdeSolver <- R6Class("CascadingOdeSolver",
       final_params <- res$par * scales
       names(final_params) <- param_names
       
-      cat("\n=== Optimization Complete ===\n")
-      print(final_params)
+      self$log_info("Optimization complete: convergence=%d value=%.6e",
+                    res$convergence, res$value)
+      self$log_info("Estimated parameters: %s",
+                    paste(sprintf("%s=%.6g", names(final_params), final_params), collapse = ", "))
       return(final_params)
     }
   )
