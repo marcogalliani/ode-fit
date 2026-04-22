@@ -23,7 +23,7 @@ jobs:
           use-public-rspm: true # Speeds up package installation on Linux
 
       - name: Install dependencies
-        run: Rscript -e 'install.packages(c("testthat", "dplyr", "stringr", "R6", "ggplot2", "gridExtra"))'
+        run: Rscript -e 'install.packages(c("testthat", "dplyr", "tidyr", "stringr", "R6", "ggplot2", "gridExtra"))'
 
       - name: Run tests
         # This tells testthat to run all scripts inside the "tests" folder
