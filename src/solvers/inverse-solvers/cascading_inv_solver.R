@@ -1,11 +1,8 @@
 library(R6)
-library(ggplot2)
-library(gridExtra)
-
   
 # Parameter cascading solver
-CascadingOdeSolver <- R6Class("CascadingOdeSolver",
-  inherit = ParameterEstimatorBase,
+CascadingInverseSolver <- R6Class("CascadingInverseSolver",
+  inherit = InverseSolverBase,
   public = list(
     initialize = function(model, times_sim, obs_times, obs_values,
                           lambda,

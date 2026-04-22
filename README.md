@@ -29,7 +29,7 @@ where $\theta$ is a vector parameter used to parametrise the regularising ODE mo
 The repo implements two major approaches to solve the estimation problems, which are the Parameter Cascading approach and the Tracking Estimation approach. Other approaches will be implemented as well for comparison purposes (e.g. nonlinear least squares).
 
 ### Parameter cascading
-The Parameter Cascading approach [(Ramsay,2007)](https://doi.org/10.1111/j.1467-9868.2007.00610.x) implemented in `src/solvers/inverse-solvers/parameter_cascading.R` consists of a multi-criteria approach. The optimisation problem is then slightly different from the estimation problem presented before. In particular, we distinguish between an outer optimisation criterion with respect to $\theta$
+The Parameter Cascading approach [(Ramsay,2007)](https://doi.org/10.1111/j.1467-9868.2007.00610.x) implemented in `src/solvers/inverse-solvers/cascading_inv_solver.R` consists of a multi-criteria approach. The optimisation problem is then slightly different from the estimation problem presented before. In particular, we distinguish between an outer optimisation criterion with respect to $\theta$
 
 $$
 H(\theta) = \sum_{j} (y_{j}-y(t_{j}))^{2},
@@ -79,7 +79,7 @@ $$
 
 
 ### Tracking estimator
-The tracking estimator is based on the works of [(Brunel and Clairon, 2015)](https://doi.org/10.48550/arXiv.1410.7554), [(Clairon and Brunel,2018)](https://doi.org/10.1080/01621459.2017.1319841) and is implemented in `src/solvers/inverse-solvers/tracking_ode_solver.R`. The approach is quite similar to parameter cascading. Actually, it can be considered as a parameter cascading having the same optimisation criterion $J(u,\theta)$ both for the inner and the outer problem, namely $H(\theta)=\min_{u}J(u,\theta)$. For this reason, the solution of the inner problem is delegated to the same solver (`src/solvers/forward-solvers/dto_fwd_solver.R`) used by parameter cascading. 
+The tracking estimator is based on the works of [(Brunel and Clairon, 2015)](https://doi.org/10.48550/arXiv.1410.7554), [(Clairon and Brunel,2018)](https://doi.org/10.1080/01621459.2017.1319841) and is implemented in `src/solvers/inverse-solvers/tracking_inv_solver.R`. The approach is quite similar to parameter cascading. Actually, it can be considered as a parameter cascading having the same optimisation criterion $J(u,\theta)$ both for the inner and the outer problem, namely $H(\theta)=\min_{u}J(u,\theta)$. For this reason, the solution of the inner problem is delegated to the same solver (`src/solvers/forward-solvers/dto_fwd_solver.R`) used by parameter cascading. 
 
 The slight modification made to the outer optimisation cost allows for simplified gradient computation and a nice interpretation of the optimisation procedure. Let's start by looking at the gradient: 
 

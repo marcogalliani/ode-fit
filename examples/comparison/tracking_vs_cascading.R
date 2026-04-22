@@ -9,7 +9,7 @@ source("examples/plot_utils.R")
 
 
 # =============================================================================
-# compare_methods -- run both TrackingOdeSolver and CascadingOdeSolver on the
+# compare_methods -- run both TrackingOdeSolver and CascadingInverseSolver on the
 # same synthetic data and compare parameter recovery, state fit, and convergence
 #
 # Arguments
@@ -81,9 +81,9 @@ compare_methods <- function(cfg,
   )
 
   # --- Parameter cascading ---
-  cat("\n=== CascadingOdeSolver  params:", param_names,
+  cat("\n=== CascadingInverseSolver  params:", param_names,
       " lambda =", lambda, "===\n")
-  cascading <- CascadingOdeSolver$new(
+  cascading <- CascadingInverseSolver$new(
     func_rhs     = cfg$rhs,
     times_sim    = t_sim,
     obs_times    = t_obs,

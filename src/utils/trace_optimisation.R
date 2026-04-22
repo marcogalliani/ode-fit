@@ -4,7 +4,7 @@ library(gridExtra)
 # Plot the outer optimisation trace from a solver that has been run.
 #
 # Arguments:
-#   solver       - a CascadingOdeSolver or TrackingOdeSolver after optimize_parameters()
+#   solver       - a CascadingInverseSolver or TrackingOdeSolver after optimize_parameters()
 #   true_params  - named list of ground-truth values, e.g. list(k=0.5, alpha=1.1)
 #   cost_field   - name of the cost entry in history (default "sse")
 #   cost_label   - y-axis label for the cost plot

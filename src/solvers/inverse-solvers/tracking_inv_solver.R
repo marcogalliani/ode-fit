@@ -1,13 +1,10 @@
 library(R6)
-library(ggplot2)
-library(gridExtra)
-
 
 # =============================================================================
 # TrackingOdeSolver
 # =============================================================================
 TrackingOdeSolver <- R6Class("TrackingOdeSolver",
-  inherit = ParameterEstimatorBase,
+  inherit = InverseSolverBase,
   public = list(
     initialize = function(model, times_sim, obs_times, obs_values,
                           lambda,

@@ -1,9 +1,4 @@
 library(R6)
-library(ggplot2)
-library(dplyr)
-library(tidyr)
-library(reshape2)
-library(gridExtra)
 
 # =============================================================================
 # DtOForwardSolver

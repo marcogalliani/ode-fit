@@ -16,7 +16,7 @@
 #
 # where  y  is a numeric vector (state),  t  is a scalar (time), and
 # p  is a named list of parameters.  This signature is directly compatible
-# with DtOForwardSolver and CascadingOdeSolver.
+# with DtOForwardSolver and CascadingInverseSolver.
 #
 # DESOLVE WRAPPER
 # ---------------
@@ -35,8 +35,8 @@
 #   times_sim        fine integration grid
 #   active_params    parameters to vary in sensitivity analysis
 #   uncertain_bounds named list of c(lo, hi) for each active parameter
-#   fixed_params     parameters held fixed by CascadingOdeSolver
-#   param_scales     normalisation scales for CascadingOdeSolver
+#   fixed_params     parameters held fixed by CascadingInverseSolver
+#   param_scales     normalisation scales for CascadingInverseSolver
 #
 # SENSITIVITY HELPER
 # ------------------
@@ -122,7 +122,7 @@ sb_kref_rhs <- function(y, t, p) {
 
 
 # === Forward Euler integrator ===
-# Consistent with DtOForwardSolver / CascadingOdeSolver.  Used to generate
+# Consistent with DtOForwardSolver / CascadingInverseSolver.  Used to generate
 # synthetic ground-truth data in examples.
 euler_solve <- function(y0, times, rhs, params) {
   n <- length(times)
@@ -228,7 +228,7 @@ ODE_CONFIGS <- list(
   # Canonical parameters match examples/param-cascading/synthetic_sb_test.R
   # and examples/param-cascading/ode_params_examples.R (run_sb_example).
   # active_params / uncertain_bounds cover the parameters estimated by
-  # CascadingOdeSolver (E, m, n); A is treated as known.
+  # CascadingInverseSolver (E, m, n); A is treated as known.
   sb = list(
     rhs = sb_rhs,
     params = list(

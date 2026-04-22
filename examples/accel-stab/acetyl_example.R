@@ -59,7 +59,7 @@ param_scales <- list(E = 10000, n = 1, C0 = 1, k_ref = 1)
 fixed_params <- params[!names(params) %in% names(param_scales)]
 
 ## solver
-cascading_solver <- CascadingOdeSolver$new(
+cascading_solver <- CascadingInverseSolver$new(
   func_rhs     = sb_kref_rhs,
   obs_times    = df_acetyl$days,
   times_sim    = times_grid,

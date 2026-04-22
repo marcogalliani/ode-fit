@@ -1,6 +1,6 @@
 library(R6)
 
-ParameterEstimatorBase <- R6Class("ParameterEstimatorBase",
+InverseSolverBase <- R6Class("InverseSolverBase",
   public = list(
     inner_solver_class = NULL,
     times_sim = NULL, obs_times = NULL, obs_values = NULL,

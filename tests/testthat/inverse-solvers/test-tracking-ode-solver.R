@@ -1,5 +1,5 @@
 # =============================================================================
-# Test suite for TrackingOdeSolver (src/solvers/tracking_ode_solver.R).
+# Test suite for TrackingOdeSolver (src/solvers/tracking_inv_solver.R).
 #
 # WHAT IS TESTED:
 #   TR1.  Outer gradient consistency — random Lotka-Volterra (6 params)

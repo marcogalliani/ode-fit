@@ -1,5 +1,5 @@
 # =============================================================================
-# Test suite for CascadingOdeSolver (src/solvers/parameter_cascading.R).
+# Test suite for CascadingInverseSolver (src/solvers/cascading_inv_solver.R).
 #
 # WHAT IS TESTED:
 #   - Outer gradient consistency
@@ -99,7 +99,7 @@ describe("Outer gradient consistency — deterministic Lotka-Volterra (all param
     param_scales = param_scales
   )
 
-  cascading <- CascadingOdeSolver$new(
+  cascading <- CascadingInverseSolver$new(
     model        = model,
     times_sim    = times_sim,
     obs_times    = obs_times,

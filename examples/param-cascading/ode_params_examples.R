@@ -10,7 +10,7 @@ source("examples/sensitivity-analysis/sensitivity_utils.R")
 
 
 # =============================================================================
-# run_example -- canonical CascadingOdeSolver workflow
+# run_example -- canonical CascadingInverseSolver workflow
 #
 # Arguments
 # ---------
@@ -59,9 +59,9 @@ run_example <- function(cfg,
   syn <- generate_synthetic_data(cfg, noise_sd = noise_sd, seed = seed)
 
   # 2. Cascading solver
-  cat("\n=== CascadingOdeSolver  params:", param_names,
+  cat("\n=== CascadingInverseSolver  params:", param_names,
       " lambda =", lambda, "===\n")
-  cascading <- CascadingOdeSolver$new(
+  cascading <- CascadingInverseSolver$new(
     func_rhs     = cfg$rhs,
     times_sim    = t_sim,
     obs_times    = t_obs,
