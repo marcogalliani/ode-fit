@@ -144,21 +144,22 @@ run_consistency_study <- function(n_obs_grid = c(6, 11, 16, 21, 31, 41, 51),
                                   seed = 123,
                                   noise_frac = 0.05,
                                   out_dir = "simulations/inverse-solvers-consistency/results",
-                                  inner_method = "gl2",
+                                  inner_method = "cn",
                                   inner_max_iter = 200,
                                   show_progress = TRUE) {
   set.seed(seed)
 
-  times_sim <- seq(0, 5, by = 0.01)
+  times_sim <- seq(0, 3, by = 0.01)
   n_times <- length(times_sim)
   n_obs_grid <- sort(unique(as.integer(n_obs_grid[n_obs_grid >= 2 & n_obs_grid <= n_times])))
+  
   if (length(n_obs_grid) == 0L) {
     stop("n_obs_grid must contain values in [2, length(times_sim)]")
   }
 
   p_true <- c(alpha = 1.20, beta = 0.45, delta = 0.12, gamma = 0.80, x0 = 10.0, y0 = 8.0)
   theta_true <- p_true[c("alpha", "beta", "delta", "gamma")]
-  theta_init <- c(alpha = 1.10, beta = 0.50, delta = 0.10, gamma = 0.75)
+  theta_init <- c(alpha = 0.5, beta = 0.8, delta = 0.4, gamma = 0.55)
   param_names <- names(theta_true)
 
   lower_phys <- c(alpha = 0, beta = 0, delta = 0, gamma = 0)
@@ -329,7 +330,7 @@ main <- function() {
   args <- commandArgs(trailingOnly = TRUE)
 
   n_rep <- 3
-  n_obs_grid <- c(6,21,51)
+  n_obs_grid <- c(51,101,256)
   inner_max_iter <- 100
   if (length(args) >= 1L) {
     maybe_rep <- suppressWarnings(as.integer(args[[1L]]))

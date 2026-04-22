@@ -59,20 +59,26 @@ compare_methods <- function(cfg,
   syn <- generate_synthetic_data(cfg, noise_sd = noise_sd, seed = seed)
   true_subset <- unlist(cfg$params[param_names])
 
+  regularizing_ode <- ODEModel$new(
+    rhs = cfg$rhs,
+    init_state = function(p) y0,
+    fixed_params = cfg$fixed_params,
+    param_scales = cfg$param_scales
+  )
+
   # --- Tracking estimator ---
   cat("\n=== TrackingOdeSolver  params:", param_names,
       " lambda =", lambda, "===\n")
+  
   tracking <- TrackingOdeSolver$new(
-    func_rhs     = cfg$rhs,
+    model        = regularizing_ode,
     times_sim    = t_sim,
     obs_times    = t_obs,
     obs_values   = syn$obs_data,
-    init_state   = function(p) as.numeric(y0),
-    fixed_params = cfg$fixed_params,
     lambda       = lambda,
-    param_scales = cfg$param_scales,
-    inner_max_iter = max_iter
+    inner_method = "gl1"
   )
+
   result_tr <- tracking$optimize_parameters(
     init_theta_physical = init_params,
     param_names         = param_names,
@@ -84,15 +90,12 @@ compare_methods <- function(cfg,
   cat("\n=== CascadingInverseSolver  params:", param_names,
       " lambda =", lambda, "===\n")
   cascading <- CascadingInverseSolver$new(
-    func_rhs     = cfg$rhs,
+    model        = regularizing_ode,
     times_sim    = t_sim,
     obs_times    = t_obs,
     obs_values   = syn$obs_data,
-    init_state   = function(p) as.numeric(y0),
-    fixed_params = cfg$fixed_params,
     lambda       = lambda,
-    param_scales = cfg$param_scales,
-    inner_max_iter = max_iter
+    inner_method = "gl1"
   )
   result_pc <- cascading$optimize_parameters(
     init_theta_physical = init_params,
@@ -196,6 +199,6 @@ compare_methods(
   param_names = c("E", "n", "m"),
   #lower_phys  = c(E = 10000, n = 0.1, m = 0.1),
   #upper_phys  = c(E = 300000, n = 20, m = 20),
-  lambda      = 1e2,
+  lambda      = 1e1,
   max_iter = 50
 )

@@ -4,8 +4,6 @@
 # WHAT IS TESTED:
 #   TR1.  Outer gradient consistency — random Lotka-Volterra (6 params)
 #   TR1a. Outer gradient consistency — fixed IC (4 params)
-#   TR2.  Descent direction
-#   TR7.  Gradient mode switch
 # =============================================================================
 
 setwd("../../..")
