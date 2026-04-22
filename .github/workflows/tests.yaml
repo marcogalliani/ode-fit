@@ -27,4 +27,4 @@ jobs:
 
       - name: Run tests
         # This tells testthat to run all scripts inside the "tests" folder
-        run: Rscript -e 'testthat::test_dir("tests", reporter = c("check", "fail"))'
+        run: pwd && Rscript -e 'testthat::test_dir("tests", reporter = c("check", "fail"))'
