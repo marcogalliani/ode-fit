@@ -5,8 +5,9 @@ library(reshape2)
 source("src/solvers/inverse-solvers/load_inverse_solvers.R")
 source("src/utils/trace_optimisation.R")
 source("examples/ode_models.R")
+source("examples/inverse-solvers/inverse_solver_example_helpers.R")
 source("examples/plot_utils.R")
-source("examples/sensitivity-analysis/sensitivity_utils.R")
+source("examples/extra/sensitivity-analysis/sensitivity_utils.R")
 
 
 # =============================================================================
@@ -57,19 +58,17 @@ run_example <- function(cfg,
 
   # 1. Synthetic data
   syn <- generate_synthetic_data(cfg, noise_sd = noise_sd, seed = seed)
+  regularizing_ode <- build_inverse_solver_model(cfg)
 
   # 2. Cascading solver
   cat("\n=== CascadingInverseSolver  params:", param_names,
       " lambda =", lambda, "===\n")
   cascading <- CascadingInverseSolver$new(
-    func_rhs     = cfg$rhs,
+    model        = regularizing_ode,
     times_sim    = t_sim,
     obs_times    = t_obs,
     obs_values   = syn$obs_data,
-    init_state   = function(p) as.numeric(y0),
-    fixed_params = cfg$fixed_params,
-    lambda       = lambda,
-    param_scales = cfg$param_scales
+    lambda       = lambda
   )
   result <- cascading$optimize_parameters(
     init_theta_physical = init_params,
@@ -101,26 +100,32 @@ run_example <- function(cfg,
 # =============================================================================
 # Example calls
 # =============================================================================
-# Exponential decay -- estimate k
-run_example(
-   cfg         = ODE_CONFIGS$decay,
-   init_params = c(k = 2.0),
-   lambda      = 1e0
- )
+main <- function() {
+  # Exponential decay -- estimate k
+  run_example(
+     cfg         = ODE_CONFIGS$decay,
+     init_params = c(k = 2.0),
+     lambda      = 1e0
+   )
 
-# Lotka-Volterra -- estimate all four parameters
-run_example(
-   cfg         = ODE_CONFIGS$lv,
-   init_params = c(alpha = 0.8, beta = 0.4, delta = 0.4, gamma = 0.6),
-   lambda      = 1e0
- )
+  # Lotka-Volterra -- estimate all four parameters
+  run_example(
+     cfg         = ODE_CONFIGS$lv,
+     init_params = c(alpha = 0.8, beta = 0.4, delta = 0.4, gamma = 0.6),
+     lambda      = 1e0
+   )
 
-# Sestak-Berggren multi-temperature -- estimate E, n, m (A fixed)
-# run_example(
-#   cfg         = ODE_CONFIGS$sb,
-#   init_params = c(E = 50000, n = 3.0, m = 0.5),
-#   param_names = c("E", "n", "m"),
-#   lower_phys  = c(E = 10000, n = 0.1, m = 0.1),
-#   upper_phys  = c(E = 300000, n = 20, m = 20),
-#   lambda      = 1e1
-# )
+  # Sestak-Berggren multi-temperature -- estimate E, n, m (A fixed)
+  # run_example(
+  #   cfg         = ODE_CONFIGS$sb,
+  #   init_params = c(E = 50000, n = 3.0, m = 0.5),
+  #   param_names = c("E", "n", "m"),
+  #   lower_phys  = c(E = 10000, n = 0.1, m = 0.1),
+  #   upper_phys  = c(E = 300000, n = 20, m = 20),
+  #   lambda      = 1e1
+  # )
+}
+
+if (sys.nframe() == 0L) {
+  main()
+}

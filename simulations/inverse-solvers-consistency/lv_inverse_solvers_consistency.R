@@ -177,7 +177,7 @@ run_consistency_study <- function(n_obs_grid = c(6, 11, 16, 21, 31, 41, 51),
   )
 
   methods <- c("tracking", "cascading")
-  lambda_map <- c(tracking = 1e2, cascading = 1e2)
+  lambda_map <- c(tracking = 1e1, cascading = 1e1)
 
   rows <- vector("list", length(methods) * length(n_obs_grid) * n_rep)
   row_id <- 1L

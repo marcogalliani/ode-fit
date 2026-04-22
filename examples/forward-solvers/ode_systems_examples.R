@@ -7,7 +7,7 @@ source("src/solvers/forward-solvers/load_forward_solvers.R")
 source("src/utils/trace_optimisation.R")
 source("examples/ode_models.R")
 source("examples/plot_utils.R")
-source("examples/sensitivity-analysis/sensitivity_utils.R")
+source("examples/extra/sensitivity-analysis/sensitivity_utils.R")
 
 
 # =============================================================================

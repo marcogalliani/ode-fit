@@ -5,6 +5,7 @@ library(reshape2)
 source("src/solvers/inverse-solvers/load_inverse_solvers.R")
 source("src/utils/trace_optimisation.R")
 source("examples/ode_models.R")
+source("examples/inverse-solvers/inverse_solver_example_helpers.R")
 source("examples/plot_utils.R")
 
 
@@ -58,13 +59,7 @@ compare_methods <- function(cfg,
   # --- Shared synthetic data ---
   syn <- generate_synthetic_data(cfg, noise_sd = noise_sd, seed = seed)
   true_subset <- unlist(cfg$params[param_names])
-
-  regularizing_ode <- ODEModel$new(
-    rhs = cfg$rhs,
-    init_state = function(p) y0,
-    fixed_params = cfg$fixed_params,
-    param_scales = cfg$param_scales
-  )
+  regularizing_ode <- build_inverse_solver_model(cfg)
 
   # --- Tracking estimator ---
   cat("\n=== TrackingOdeSolver  params:", param_names,
@@ -178,27 +173,33 @@ compare_methods <- function(cfg,
 # Example calls
 # =============================================================================
 
-# Exponential decay -- estimate k
-compare_methods(
-  cfg         = ODE_CONFIGS$decay,
-  init_params = c(k = 2.0),
-  lambda      = 1e0
-)
+main <- function() {
+  # Exponential decay -- estimate k
+  compare_methods(
+    cfg         = ODE_CONFIGS$decay,
+    init_params = c(k = 2.0),
+    lambda      = 1e0
+  )
 
-# Lotka-Volterra -- estimate all four parameters
-compare_methods(
-  cfg         = ODE_CONFIGS$lv,
-  init_params = c(alpha = 0.8, beta = 0.4, delta = 0.4, gamma = 0.6),
-  lambda      = 1e0
-)
+  # Lotka-Volterra -- estimate all four parameters
+  compare_methods(
+    cfg         = ODE_CONFIGS$lv,
+    init_params = c(alpha = 0.8, beta = 0.4, delta = 0.4, gamma = 0.6),
+    lambda      = 1e0
+  )
 
-# Sestak-Berggren multi-temperature -- estimate E, n, m
-compare_methods(
-  cfg         = ODE_CONFIGS$sb,
-  init_params = c(E = 50000, n = 3.0, m = 0.2),
-  param_names = c("E", "n", "m"),
-  #lower_phys  = c(E = 10000, n = 0.1, m = 0.1),
-  #upper_phys  = c(E = 300000, n = 20, m = 20),
-  lambda      = 1e1,
-  max_iter = 50
-)
+  # Sestak-Berggren multi-temperature -- estimate E, n, m
+  compare_methods(
+    cfg         = ODE_CONFIGS$sb,
+    init_params = c(E = 50000, n = 3.0, m = 0.2),
+    param_names = c("E", "n", "m"),
+    #lower_phys  = c(E = 10000, n = 0.1, m = 0.1),
+    #upper_phys  = c(E = 300000, n = 20, m = 20),
+    lambda      = 1e1,
+    max_iter = 50
+  )
+}
+
+if (sys.nframe() == 0L) {
+  main()
+}

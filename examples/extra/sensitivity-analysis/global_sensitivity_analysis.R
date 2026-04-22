@@ -3,12 +3,6 @@ library(sensitivity)
 
 source("examples/ode_models.R")
 
-# Select configuration ----
-# Change this line to switch models.  Available keys: decay, lv, sb,
-# sb_aspack, sb_asymptote.  All configurations are defined in
-# examples/ode_models.R (ODE_CONFIGS list).
-active <- make_sens_config(ODE_CONFIGS$lv)
-
 # Helpers ----
 evaluate_trajectory <- function(pars, model, init_state, t_grid,
                                 rhs_args = list()) {
@@ -47,15 +41,13 @@ extract_metric <- function(trajectory, state_name,
   )
 }
 
-# Names of the state variables to aggregate (all state names by default).
-active_states <- names(active$state)
-
 # Evaluate a scalar metric for every row of a parameter design matrix X.
 # Columns of X must correspond to active$uncertain_bounds keys.
 evaluate_parameter_sets <- function(X, active,
                                     metric = "final",
                                     state_aggregation = "mean") {
   uncertain_names <- names(active$uncertain_bounds)
+  active_states <- names(active$state)
   vapply(seq_len(nrow(X)), function(i) {
     pars <- active$params
     pars[uncertain_names] <- as.numeric(X[i, uncertain_names])
@@ -70,6 +62,7 @@ evaluate_parameter_sets <- function(X, active,
 evaluate_trajectory_sets <- function(X, active,
                                      state_aggregation = "mean") {
   uncertain_names <- names(active$uncertain_bounds)
+  active_states <- names(active$state)
   do.call(rbind, lapply(seq_len(nrow(X)), function(i) {
     pars <- active$params
     pars[uncertain_names] <- as.numeric(X[i, uncertain_names])
@@ -140,58 +133,70 @@ run_global_sobol_timeseries <- function(active, n_samples = 300,
        n_samples = n_samples)
 }
 
-# Run scalar analysis ----
-result <- run_global_sobol(
-  active            = active,
-  n_samples         = 300,
-  metric            = "final",
-  state_aggregation = "mean",
-  nboot             = 100
-)
+main <- function() {
+  # Select configuration ----
+  # Change this line to switch models.  Available keys: decay, lv, sb,
+  # sb_aspack, sb_asymptote.  All configurations are defined in
+  # examples/ode_models.R (ODE_CONFIGS list).
+  active <- make_sens_config(ODE_CONFIGS$lv)
 
-cat("\n--- Global Sensitivity (Sobol-Jansen, scalar metric) ---\n")
-cat("Metric       :", result$metric, "|",
-    "State aggr.  :", result$state_aggregation, "\n")
-cat("Samples      :", result$n_samples, "\n\n")
+  # Run scalar analysis ----
+  result <- run_global_sobol(
+    active            = active,
+    n_samples         = 300,
+    metric            = "final",
+    state_aggregation = "mean",
+    nboot             = 100
+  )
 
-cat("First-order Sobol indices (S):\n")
-print(result$sobol$S)
+  cat("\n--- Global Sensitivity (Sobol-Jansen, scalar metric) ---\n")
+  cat("Metric       :", result$metric, "|",
+      "State aggr.  :", result$state_aggregation, "\n")
+  cat("Samples      :", result$n_samples, "\n\n")
 
-cat("\nTotal-order Sobol indices (T):\n")
-print(result$sobol$T)
+  cat("First-order Sobol indices (S):\n")
+  print(result$sobol$S)
 
-interaction_share <- result$sobol$T$original - result$sobol$S$original
-names(interaction_share) <- rownames(result$sobol$S)
-cat("\nInteraction / nonlinear contribution (T - S):\n")
-print(round(interaction_share, 4))
+  cat("\nTotal-order Sobol indices (T):\n")
+  print(result$sobol$T)
 
-cat("\nInterpretation:\n")
-cat("  High S       : large direct (main-effect) contribution to output variance.\n")
-cat("  High T       : large total contribution (main + interactions).\n")
-cat("  Large (T-S)  : strong interactions or nonlinear parameter coupling.\n")
-cat("  Sobol indices are variance fractions, not correlation coefficients.\n")
+  interaction_share <- result$sobol$T$original - result$sobol$S$original
+  names(interaction_share) <- rownames(result$sobol$S)
+  cat("\nInteraction / nonlinear contribution (T - S):\n")
+  print(round(interaction_share, 4))
 
-if (interactive()) plot(result$sobol)
+  cat("\nInterpretation:\n")
+  cat("  High S       : large direct (main-effect) contribution to output variance.\n")
+  cat("  High T       : large total contribution (main + interactions).\n")
+  cat("  Large (T-S)  : strong interactions or nonlinear parameter coupling.\n")
+  cat("  Sobol indices are variance fractions, not correlation coefficients.\n")
 
-# Run time-resolved analysis ----
-ts_result <- run_global_sobol_timeseries(
-  active            = active,
-  n_samples         = 300,
-  state_aggregation = "mean"
-)
+  if (interactive()) plot(result$sobol)
 
-par_colors <- seq_len(length(ts_result$par_names))
+  # Run time-resolved analysis ----
+  ts_result <- run_global_sobol_timeseries(
+    active            = active,
+    n_samples         = 300,
+    state_aggregation = "mean"
+  )
 
-matplot(ts_result$t_grid, ts_result$S,
-        type = "l", lty = 1, col = par_colors, ylim = c(0, 1),
-        xlab = "Time", ylab = "First-order Sobol index (S)",
-        main = "Time-resolved global sensitivity (first-order)")
-legend("topright", legend = ts_result$par_names,
-       col = par_colors, lty = 1, bty = "n")
+  par_colors <- seq_len(length(ts_result$par_names))
 
-matplot(ts_result$t_grid, ts_result$T,
-        type = "l", lty = 2, col = par_colors, ylim = c(0, 1),
-        xlab = "Time", ylab = "Total-order Sobol index (T)",
-        main = "Time-resolved global sensitivity (total-order)")
-legend("topright", legend = ts_result$par_names,
-       col = par_colors, lty = 2, bty = "n")
+  matplot(ts_result$t_grid, ts_result$S,
+          type = "l", lty = 1, col = par_colors, ylim = c(0, 1),
+          xlab = "Time", ylab = "First-order Sobol index (S)",
+          main = "Time-resolved global sensitivity (first-order)")
+  legend("topright", legend = ts_result$par_names,
+         col = par_colors, lty = 1, bty = "n")
+
+  matplot(ts_result$t_grid, ts_result$T,
+          type = "l", lty = 2, col = par_colors, ylim = c(0, 1),
+          xlab = "Time", ylab = "Total-order Sobol index (T)",
+          main = "Time-resolved global sensitivity (total-order)")
+  legend("topright", legend = ts_result$par_names,
+         col = par_colors, lty = 2, bty = "n")
+}
+
+if (sys.nframe() == 0L) {
+  main()
+}
