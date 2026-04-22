@@ -6,6 +6,9 @@ images/
 *.gif
 *.png
 
+# results
+*.csv
+
 # internal docs
 docs/
 

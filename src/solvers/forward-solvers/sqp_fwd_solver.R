@@ -1,5 +1,5 @@
 # =============================================================================
-# src/solvers/sqp_ocp_solver.R
+# src/solvers/sqp_fwd_solver.R
 #
 # SQP (Sequential Quadratic Programming) solver for the ODE-constrained
 # optimal control problem using Euler discretization.

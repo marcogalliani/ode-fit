@@ -1,5 +1,5 @@
 # =============================================================================
-# Tests for SqpOcpSolver (src/solvers/sqp_ocp_solver.R).
+# Tests for SqpOcpSolver (src/solvers/sqp_fwd_solver.R).
 #
 # WHAT IS TESTED:
 #   SQP1. 1-D decay — convergence and cost reduction
