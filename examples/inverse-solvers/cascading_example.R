@@ -68,11 +68,14 @@ run_example <- function(cfg,
     times_sim    = t_sim,
     obs_times    = t_obs,
     obs_values   = syn$obs_data,
-    lambda       = lambda
+    lambda       = lambda,
+    verbose = T
   )
   result <- cascading$optimize_parameters(
     init_theta_physical = init_params,
-    param_names         = param_names
+    param_names         = param_names,
+    lower_phys = lower_phys,
+    upper_phys = upper_phys
   )
 
   # 3. Parameter recovery report
@@ -101,29 +104,11 @@ run_example <- function(cfg,
 # Example calls
 # =============================================================================
 main <- function() {
-  # Exponential decay -- estimate k
   run_example(
-     cfg         = ODE_CONFIGS$decay,
-     init_params = c(k = 2.0),
-     lambda      = 1e0
-   )
-
-  # Lotka-Volterra -- estimate all four parameters
-  run_example(
-     cfg         = ODE_CONFIGS$lv,
-     init_params = c(alpha = 0.8, beta = 0.4, delta = 0.4, gamma = 0.6),
-     lambda      = 1e0
-   )
-
-  # Sestak-Berggren multi-temperature -- estimate E, n, m (A fixed)
-  # run_example(
-  #   cfg         = ODE_CONFIGS$sb,
-  #   init_params = c(E = 50000, n = 3.0, m = 0.5),
-  #   param_names = c("E", "n", "m"),
-  #   lower_phys  = c(E = 10000, n = 0.1, m = 0.1),
-  #   upper_phys  = c(E = 300000, n = 20, m = 20),
-  #   lambda      = 1e1
-  # )
+    cfg = ODE_CONFIGS$lv,
+    init_params = c(alpha = 0.8, beta = 0.4, delta = 0.4, gamma = 0.6),
+    lambda = 1e3
+  )
 }
 
 if (sys.nframe() == 0L) {

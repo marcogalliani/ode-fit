@@ -59,7 +59,7 @@ safe_fit_solver <- function(method,
           lambda = lambda,
           inner_method = inner_method,
           inner_max_iter = inner_max_iter,
-          verbose = FALSE
+          verbose = F
         )
       } else {
         CascadingInverseSolver$new(
@@ -70,7 +70,7 @@ safe_fit_solver <- function(method,
           lambda = lambda,
           inner_method = inner_method,
           inner_max_iter = inner_max_iter,
-          verbose = FALSE
+          verbose = F
         )
       }
     },
@@ -95,7 +95,7 @@ safe_fit_solver <- function(method,
           param_names = param_names,
           lower_phys = lower_phys,
           upper_phys = upper_phys,
-          gradient_mode = "adjoint"
+          gradient_mode = "sensitivity"
         )
       } else {
         solver$optimize_parameters(
@@ -159,7 +159,7 @@ run_consistency_study <- function(n_obs_grid = c(6, 11, 16, 21, 31, 41, 51),
 
   p_true <- c(alpha = 1.20, beta = 0.45, delta = 0.12, gamma = 0.80, x0 = 10.0, y0 = 8.0)
   theta_true <- p_true[c("alpha", "beta", "delta", "gamma")]
-  theta_init <- c(alpha = 0.5, beta = 0.8, delta = 0.4, gamma = 0.55)
+  theta_init <- c(alpha = 0.9, beta = 0.8, delta = 0.4, gamma = 0.55)
   param_names <- names(theta_true)
 
   lower_phys <- c(alpha = 0, beta = 0, delta = 0, gamma = 0)
@@ -329,8 +329,8 @@ run_consistency_study <- function(n_obs_grid = c(6, 11, 16, 21, 31, 41, 51),
 main <- function() {
   args <- commandArgs(trailingOnly = TRUE)
 
-  n_rep <- 3
-  n_obs_grid <- c(51,101,256)
+  n_rep <- 30
+  n_obs_grid <- c(51,101,256,501)
   inner_max_iter <- 100
   if (length(args) >= 1L) {
     maybe_rep <- suppressWarnings(as.integer(args[[1L]]))

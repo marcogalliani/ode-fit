@@ -135,25 +135,6 @@ InverseSolverBase <- R6Class("InverseSolverBase",
         stop("init_state returned non-finite values")
       }
       y0
-    },
-
-    init_state_jacobian_fd = function(params_phys, param_names, eps = 1e-7) {
-      np <- length(param_names)
-      J <- matrix(0, self$n_vars, np)
-
-      for (j in seq_len(np)) {
-        nm <- param_names[j]
-        dth <- eps * max(abs(params_phys[[nm]]), 1)
-        p_p <- params_phys
-        p_m <- params_phys
-        p_p[[nm]] <- params_phys[[nm]] + dth
-        p_m[[nm]] <- params_phys[[nm]] - dth
-        y0_p <- self$eval_init_state(p_p)
-        y0_m <- self$eval_init_state(p_m)
-        J[, j] <- (y0_p - y0_m) / (2 * dth)
-      }
-
-      J
     }
   )
 )

@@ -96,7 +96,7 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
       }
 
       p_phys <- self$unpack_physical(theta_norm, param_names)
-      J0 <- self$init_state_jacobian_fd(p_phys, param_names)
+      J0 <- self$model$init_state_jacobian_fd(p_phys, param_names)
       scales <- self$get_scales_vector(param_names)
       s$compute_parameter_gradient_adjoint(
         param_names = param_names,
@@ -106,71 +106,39 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
       )
     },
 
+    # Outer Gradient (Forward Sensitivity Method) — delegates to the inner solver
+    #   dH/dtheta_j = (2/ns) * sum_t r[t]^T * S[t, , j]
+    # Note that we just need the state sensitivity and not the control sens.
+    # as dH/du = 0, as the inner solver already converged
+    outer_gradient_sensitivity = function(theta_norm, param_names) {
+      if (is.null(self$last_theta) || !all(theta_norm == self$last_theta))
+        self$outer_objective(theta_norm, param_names)
+
+      s      <- self$last_solver
+      if (is.null(s) || is.null(s$y) || is.null(s$p)) {
+        return(rep(0, length(param_names)))
+      }
+
+      if (!all(is.finite(s$y)) || !all(is.finite(s$p))) {
+        return(rep(0, length(param_names)))
+      }
+
+      p_phys <- self$unpack_physical(theta_norm, param_names)
+      J0 <- self$model$init_state_jacobian_fd(p_phys, param_names)
+      scales <- self$get_scales_vector(param_names)
+      s$compute_parameter_gradient_sens(
+        param_names = param_names,
+        init_state_jacobian = J0,
+        return_normalized = TRUE,
+        scales = scales
+      )
+    },
     outer_gradient_dispatch = function(theta_norm, param_names, gradient_mode = "adjoint") {
       mode <- match.arg(gradient_mode, c("adjoint", "sensitivity"))
       if (mode == "adjoint") {
         return(self$outer_gradient(theta_norm, param_names))
       }
       self$outer_gradient_sensitivity(theta_norm, param_names)
-    },
-
-    # =========================================================================
-    # 3. Partial sensitivity matrix S[ns, nv, np]:
-    #    S[t, v, j] = dy_{t,v} / d theta_j_physical  (u* held fixed)
-    # =========================================================================
-    compute_sensitivity_matrix = function(theta_norm, param_names) {
-      if (is.null(self$last_theta) || !all(theta_norm == self$last_theta))
-        self$outer_objective(theta_norm, param_names)
-
-      s      <- self$last_solver
-      p_phys <- self$unpack_physical(theta_norm, param_names)
-      ns     <- s$n_steps
-      nv     <- s$n_vars
-      np     <- length(param_names)
-
-      S <- array(0, c(ns, nv, np))
-      J0 <- self$init_state_jacobian_fd(p_phys, param_names)
-      S[1L, , ] <- J0
-
-      for (t in seq_len(ns - 1L)) {
-        dU <- s$get_discrete_control_jacobian(
-          t_idx = t,
-          param_names = param_names,
-          include_theta = TRUE
-        )
-        rhs <- dU$Du_dyc %*% S[t, , ] + dU$Du_dtheta
-        S[t + 1L, , ] <- tryCatch(
-          -solve(dU$Du_dyn, rhs),
-          error = function(e) -qr.solve(dU$Du_dyn, rhs)
-        )
-      }
-      return(S)   # [ns, nv, np]
-    },
-
-    # Outer Gradient (Forward Sensitivity Method) — delegates to
-    # compute_sensitivity_matrix and applies the chain rule.
-    #   dH/dtheta_j = (2/ns) * sum_t r[t]^T * S[t, , j]
-    outer_gradient_sensitivity = function(theta_norm, param_names) {
-      if (is.null(self$last_theta) || !all(theta_norm == self$last_theta))
-        self$outer_objective(theta_norm, param_names)
-
-      s     <- self$last_solver
-      if (is.null(s) || is.null(s$y) || !all(is.finite(s$y))) {
-        return(rep(0, length(param_names)))
-      }
-      ns    <- s$n_steps
-      np    <- length(param_names)
-      resid <- ifelse(is.na(s$observations_mapped), 0,
-                      s$y - s$observations_mapped)
-
-      S <- self$compute_sensitivity_matrix(theta_norm, param_names)
-
-      grad_phys <- vapply(seq_len(np),
-                          function(j) sum((2 / ns) * resid * S[, , j]),
-                          numeric(1L))
-
-      scales <- self$get_scales_vector(param_names)
-      return(grad_phys * scales)
     },
 
     # =========================================================================
@@ -211,8 +179,7 @@ TrackingOdeSolver <- R6Class("TrackingOdeSolver",
         method      = "L-BFGS-B",
         lower       = lower_norm,
         upper       = upper_norm,
-        control     = list(maxit = 30,
-                           factr = 1e12,
+        control     = list(maxit = 50,
                            trace = if (isTRUE(self$verbose)) 1 else 0)
       )
 

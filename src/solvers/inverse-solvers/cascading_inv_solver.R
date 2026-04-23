@@ -144,7 +144,7 @@ CascadingInverseSolver <- R6Class("CascadingInverseSolver",
       }
       s$params <- base_params
 
-      J0 <- self$init_state_jacobian_fd(p_phys, param_names)
+      J0 <- self$model$init_state_jacobian_fd(p_phys, param_names)
       idx_t0 <- seq(1L, NT, by = ns)
 
       # y(t0) is fixed by init_state(theta): enforce this as a hard boundary

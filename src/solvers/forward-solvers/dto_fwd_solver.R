@@ -76,8 +76,33 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       self$u <- matrix(0, self$n_steps, self$n_vars)
       self$p <- matrix(0, self$n_steps, self$n_vars)
     },
-    
 
+    #' Partial sensitivity matrix S[ns, nv, np]:
+    #'    S[t, v, j] = dy_{t,v} / d theta_j_physical  (u* held fixed)
+    compute_sensitivity_matrix = function(params, param_names) {
+      ns     <- self$n_steps
+      nv     <- self$n_vars
+      np     <- length(param_names)
+
+      S <- array(0, c(ns, nv, np))
+      J0 <- self$model$init_state_jacobian_fd(params, param_names)
+      S[1L, , ] <- J0
+
+      for (t in seq_len(ns - 1L)) {
+        dU <- self$get_discrete_control_jacobian(
+          t_idx = t,
+          param_names = param_names,
+          include_theta = TRUE
+        )
+        rhs <- dU$Du_dyc %*% S[t, , ] + dU$Du_dtheta
+        S[t + 1L, , ] <- tryCatch(
+          -solve(dU$Du_dyn, rhs),
+          error = function(e) -qr.solve(dU$Du_dyn, rhs)
+        )
+      }
+      return(S)   # [ns, nv, np]
+    },
+    
     #' Compute loss function gradient w.r.t. ODE params from discrete sensitivities.
     #'
     #' @description
@@ -91,7 +116,7 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
     #' 
     #' @note If `self$y` or `self$p` contains non-finite values, returns a zero
     #'   gradient vector instead of stopping.
-    compute_parameter_gradient_adjoint = function(param_names,
+    compute_parameter_gradient_sens = function(param_names,
                                                   init_state_jacobian = NULL,
                                                   return_normalized = FALSE,
                                                   scales = NULL) {
@@ -109,24 +134,7 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       np <- length(param_names)
       nv <- self$n_vars
 
-      S <- array(0, c(ns, nv, np))
-      if (!is.null(init_state_jacobian)) {
-        S[1L, , ] <- init_state_jacobian
-      }
-
-      for (t in seq_len(ns - 1L)) {
-        dU <- self$get_discrete_control_jacobian(
-          t_idx = t,
-          param_names = param_names,
-          include_theta = TRUE
-        )
-
-        rhs <- dU$Du_dyc %*% S[t, , ] + dU$Du_dtheta
-        S[t + 1L, , ] <- tryCatch(
-          -solve(dU$Du_dyn, rhs),
-          error = function(e) -qr.solve(dU$Du_dyn, rhs)
-        )
-      }
+      S <- self$compute_sensitivity_matrix(self$params, param_names)
 
       resid <- ifelse(is.na(self$observations_mapped), 0,
                       self$y - self$observations_mapped)
@@ -149,6 +157,57 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       grad_norm
     },
 
+    #' Compute loss function gradient w.r.t. the ODE params through adjoint method
+    compute_parameter_gradient_adjoint = function(param_names,
+                                              init_state_jacobian = NULL,
+                                              return_normalized = FALSE,
+                                              scales = NULL) {
+      if (is.null(self$y) || is.null(self$p)) {
+        stop("State/adjoint trajectories are not available. Run optimize() first.")
+      }
+      if (!all(is.finite(self$y)) || !all(is.finite(self$p))) {
+        grad <- rep(0, length(param_names))
+        names(grad) <- param_names
+        return(grad)
+      }
+
+      ns <- self$n_steps
+      np <- length(param_names)
+
+      grad_phys <- rep(0, np)
+      names(grad_phys) <- param_names
+
+      if (!is.null(init_state_jacobian)) {
+        grad_phys <- grad_phys + as.numeric(crossprod(self$p[1L, ], init_state_jacobian))
+      }
+
+      # Adjoint Sweep (t = 1 to ns - 1)
+      for (t in seq_len(ns - 1L)) {
+        # Get the partial derivative of the discrete step equation w.r.t parameters
+        dU <- self$get_discrete_control_jacobian(
+          t_idx = t,
+          param_names = param_names,
+          include_theta = TRUE
+        )
+        # Envelope theorem term under the solver convention (+p^T U):
+        # dH/dtheta = - sum_t dt[t] * p[t+1]^T (dU/dtheta)_t.
+        grad_phys <- grad_phys - self$dt_vec[t] *
+          as.numeric(crossprod(self$p[t + 1L, ], dU$Du_dtheta))
+      }
+
+      if (!return_normalized) {
+        return(grad_phys)
+      }
+
+      if (is.null(scales) || length(scales) != np) {
+        stop("scales must be provided with one entry per parameter when return_normalized = TRUE")
+      }
+      
+      grad_norm <- grad_phys * as.numeric(scales)
+      names(grad_norm) <- param_names
+      return(grad_norm)
+    },
+  
     #' Differentiate one-step discrete control map.
     #'
     #' Returns Jacobian blocks of the local discrete control equation with

@@ -209,8 +209,8 @@ ODE_CONFIGS <- list(
   ),
   lv = list(
     rhs = lv_rhs,
-    params = list(alpha = 1.1, beta = 0.4, delta = 0.1, gamma = 0.4),
-    y0 = c(x = 10, y = 10),
+    params = list(alpha = 1.2, beta = 0.45, delta = 0.12, gamma = 0.8),
+    y0 = c(x = 10, y = 8),
     times_obs = seq(0, 5, by = 0.5),
     times_sim = seq(0, 5, by = 0.1),
     active_params = c("alpha", "beta", "delta", "gamma"),

@@ -144,6 +144,31 @@ ODEModel <- R6Class("ODEModel",
       self$init_state_fun(self$merge_params(params))
     },
 
+    init_state_jacobian_fd = function(params_phys, param_names, eps = 1e-7) {
+      if (is.null(param_names) || length(param_names) == 0L) {
+        stop("param_names must be non-empty for initial-state Jacobian computation")
+      }
+
+      y0 <- as.numeric(self$init_state(params_phys))
+      nv <- length(y0)
+      np <- length(param_names)
+      J <- matrix(0, nv, np)
+
+      for (j in seq_len(np)) {
+        nm <- param_names[j]
+        dth <- eps * max(abs(params_phys[[nm]]), 1)
+        p_p <- params_phys
+        p_m <- params_phys
+        p_p[[nm]] <- params_phys[[nm]] + dth
+        p_m[[nm]] <- params_phys[[nm]] - dth
+        y0_p <- as.numeric(self$init_state(p_p))
+        y0_m <- as.numeric(self$init_state(p_m))
+        J[, j] <- (y0_p - y0_m) / (2 * dth)
+      }
+
+      J
+    },
+
     get_scales = function(param_names) {
       scales <- unlist(self$param_scales[param_names], use.names = TRUE)
       if (length(scales) != length(param_names) || any(is.na(scales))) {
