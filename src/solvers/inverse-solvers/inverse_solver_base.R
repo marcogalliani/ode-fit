@@ -37,7 +37,7 @@ InverseSolverBase <- R6Class("InverseSolverBase",
 
       self$fixed_params <- model$fixed_params
       self$lambda <- lambda
-      self$inner_solver_class <- DtOForwardSolver
+      self$inner_solver_class <- AdjointForwardSolver
       self$inner_method <- inner_method
       self$verbose <- isTRUE(verbose)
       self$param_scales <- model$param_scales

@@ -1,5 +1,5 @@
 source("src/solvers/forward-solvers/load_forward_solvers.R")
-DtOForwardSolver <- get("DtOForwardSolver", envir = .GlobalEnv)
+AdjointForwardSolver <- get("AdjointForwardSolver", envir = .GlobalEnv)
 
 lv_rhs <- function(y, t, p) c(
   p$alpha * y[1] - p$beta * y[1] * y[2],
@@ -41,7 +41,7 @@ main <- function() {
 
   for (method in c("cn", "gl1", "gl2")) {
     result <- tryCatch({
-      solver <- DtOForwardSolver$new(
+      solver <- AdjointForwardSolver$new(
         func_rhs   = lv_rhs,
         times_sim  = times_sim,
         obs_times  = times_sim,

@@ -11,7 +11,7 @@ source("examples/extra/sensitivity-analysis/sensitivity_utils.R")
 
 
 # =============================================================================
-# run_example -- canonical TrackingOdeSolver workflow
+# run_example -- canonical TrackingInverseSolver workflow
 #
 # Arguments
 # ---------
@@ -61,9 +61,9 @@ run_example <- function(cfg,
   regularizing_ode <- build_inverse_solver_model(cfg)
 
   # 2. Tracking solver
-  cat("\n=== TrackingOdeSolver  params:", param_names,
+  cat("\n=== TrackingInverseSolver  params:", param_names,
       " lambda =", lambda, "===\n")
-  tracking <- TrackingOdeSolver$new(
+  tracking <- TrackingInverseSolver$new(
     model        = regularizing_ode,
     times_sim    = t_sim,
     obs_times    = t_obs,

@@ -84,6 +84,7 @@ assemble_global_K_cn <- function(y_fwd, times, dt_vec, jac_fn) {
 # FEMForwardSolver
 # =============================================================================
 FEMForwardSolver <- R6Class("FEMForwardSolver",
+  inherit = ForwardSolverBase,
 
   private = list(
     fwd_y         = NULL,   # ns×nv trajectory
@@ -93,12 +94,6 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
     cache_y            = NULL,
     cache_lambda       = NULL,
     cache_grad_contrib = NULL,
-
-    log_debug = function(fmt, ...) {
-      if (!isTRUE(self$verbose)) return(invisible(NULL))
-      message(sprintf(paste0("[FEMForwardSolver] ", fmt), ...))
-      invisible(NULL)
-    },
 
     # ------------------------------------------------------------------
     # Load vector L = E^T r  (exact point evaluation, no quadrature).
@@ -227,36 +222,23 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
   ),
 
   public = list(
-    model = NULL, params = NULL, lambda_reg = NULL,
-    times_sim = NULL, n_steps = NULL, dt_vec = NULL, n_vars = NULL,
-    method = NULL,
-    verbose = FALSE,
+    lambda_reg = NULL,
     observations_mapped = NULL,
     y = NULL, u = NULL, p = NULL,
 
     initialize = function(model, times_sim, obs_times, obs_values,
                           params, lambda, method = "gl2", verbose = FALSE) {
-      if (is.null(model) || !inherits(model, "ODEModel")) {
-        stop("model must be an ODEModel instance")
-      }
-
-      self$model  <- model
-      obs_times  <- round(obs_times,  digits = 10)
-      times_sim  <- sort(unique(round(c(times_sim, obs_times), digits = 10)))
-      self$times_sim  <- times_sim
-      self$params     <- params
-      self$lambda_reg <- lambda
-      self$n_steps    <- length(times_sim)
-      self$n_vars     <- ncol(obs_values)
-      self$dt_vec     <- c(diff(times_sim), 0)
-      self$method     <- method
-      self$verbose    <- isTRUE(verbose)
-
-      self$observations_mapped <- matrix(NA, self$n_steps, self$n_vars)
-      self$observations_mapped[times_sim %in% obs_times, ] <- obs_values
-      self$y <- matrix(0, self$n_steps, self$n_vars)
-      self$u <- matrix(0, self$n_steps, self$n_vars)
-      self$p <- matrix(0, self$n_steps, self$n_vars)
+      self$initialize_forward_solver(
+        model = model,
+        times_sim = times_sim,
+        obs_times = obs_times,
+        obs_values = obs_values,
+        params = params,
+        lambda = lambda,
+        method = method,
+        verbose = verbose
+      )
+      self$lambda_reg <- self$lambda
     },
 
     get_jacobian = function(y_vec, t_val) {
@@ -431,18 +413,9 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
                         reltol = sqrt(.Machine$double.eps), verbose = NULL) {
       if (is.null(verbose)) verbose <- self$verbose
       if (is.null(u_init)) u_init <- rep(0, self$n_steps * self$n_vars)
-      if (length(y0) == 1 && is.na(y0)) {
-        first_row <- which(!is.na(self$observations_mapped[, 1]))[1]
-        y0 <- self$observations_mapped[first_row, ]; y0[is.na(y0)] <- 0
-      } else if (any(is.na(y0))) {
-        for (v in seq_len(self$n_vars)) {
-          if (is.na(y0[v])) {
-            fv <- which(!is.na(self$observations_mapped[, v]))[1]
-            y0[v] <- if (!is.na(fv)) self$observations_mapped[fv, v] else 0
-          }
-        }
-      }
-      private$log_debug("Starting optimization: method=%s max_iter=%d reltol=%.3e",
+
+      y0 <- self$sanitize_initial_state(y0)
+      self$log_debug("Starting optimization: method=%s max_iter=%d reltol=%.3e",
             self$method, max_iter, reltol)
       res <- optim(par = u_init,
                    fn  = self$cost_function,
@@ -458,7 +431,7 @@ FEMForwardSolver <- R6Class("FEMForwardSolver",
         sol    <- self$solve_forward_adjoint(self$u, y0)
         self$y <- sol$y; self$p <- sol$lambda
       }
-      private$log_debug("Optimization complete: converged_code=%d final_value=%.6e",
+      self$log_debug("Optimization complete: converged_code=%d final_value=%.6e",
                         res$convergence, res$value)
       res
     }

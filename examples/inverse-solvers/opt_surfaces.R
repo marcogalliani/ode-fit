@@ -24,7 +24,7 @@ run_surface_comparison <- function() {
   obs_data <- obs_data + matrix(rnorm(length(obs_data), 0, 1),
                                 nrow(obs_data), 2)
 
-  solver <- DtOForwardSolver$new(
+  solver <- AdjointForwardSolver$new(
     func_rhs  = lv_rhs,
     obs_times = times_obs,
     times_sim = times_sim,

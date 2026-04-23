@@ -1,5 +1,7 @@
 source("src/ode-models/load_ode_models.R")
 source("src/solvers/numerical-solvers/load_numerical_solvers.R")
+source("src/solvers/forward-solvers/forward_solver_base.R")
 source("src/solvers/forward-solvers/dto_fwd_solver.R")
+source("src/solvers/forward-solvers/bvp_fwd_solver.R")
 source("src/solvers/forward-solvers/fem_fwd_solver.R")
 source("src/solvers/forward-solvers/sqp_fwd_solver.R")

@@ -2,7 +2,7 @@
 
 This folder contains a simulation study to assess consistency of inverse ODE parameter estimates as the number of observations increases, comparing:
 
-- Tracking approach (`TrackingOdeSolver`)
+- Tracking approach (`TrackingInverseSolver`)
 - Parameter cascading approach (`CascadingInverseSolver`)
 
 The setup mirrors the Lotka-Volterra configuration used in the inverse-solvers test suite:

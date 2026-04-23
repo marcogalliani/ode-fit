@@ -1,9 +1,9 @@
 library(R6)
 
 # =============================================================================
-# TrackingOdeSolver
+# TrackingInverseSolver
 # =============================================================================
-TrackingOdeSolver <- R6Class("TrackingOdeSolver",
+TrackingInverseSolver <- R6Class("TrackingInverseSolver",
   inherit = InverseSolverBase,
   private = list(
 

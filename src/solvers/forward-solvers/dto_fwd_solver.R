@@ -1,7 +1,7 @@
 library(R6)
 
 # =============================================================================
-# DtOForwardSolver
+# AdjointForwardSolver
 #
 # Physics-informed smoother estimating unknown additive forcing u(t).
 #
@@ -14,7 +14,8 @@ library(R6)
 # provides both the forward integrator and its consistent discrete adjoint.
 #
 # =============================================================================
-DtOForwardSolver <- R6Class("DtOForwardSolver",
+AdjointForwardSolver <- R6Class("AdjointForwardSolver",
+  inherit = ForwardSolverBase,
 
   private = list(
     dto_solver         = NULL,
@@ -22,12 +23,6 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
     cache_y            = NULL,
     cache_p            = NULL,
     cache_grad_contrib = NULL,
-
-    log_debug = function(fmt, ...) {
-      if (!isTRUE(self$verbose)) return(invisible(NULL))
-      message(sprintf(paste0("[DtOForwardSolver] ", fmt), ...))
-      invisible(NULL)
-    },
 
     # source_fn(t_idx) = (2/ns) * (y[t] - obs[t]),  NA obs -> 0
     make_source_fn = function(y_curr) {
@@ -42,39 +37,20 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
   ),
 
   public = list(
-    model = NULL, params = NULL, lambda = NULL,
-    times_sim = NULL, n_steps = NULL, dt_vec = NULL, n_vars = NULL,
-    method = NULL,
-    verbose = FALSE,
-
-    observations_mapped = NULL,
-    y = NULL, u = NULL, p = NULL,
-
-    #' Initialize DtOForwardSolver runtime state.
+    #' Initialize AdjointForwardSolver runtime state.
     initialize = function(model, times_sim, obs_times, obs_values, params, lambda,
                           method = "gl2", verbose = FALSE) {
-      if (is.null(model) || !inherits(model, "ODEModel")) {
-        stop("model must be an ODEModel instance")
-      }
-
-      self$model <- model
-      obs_times  <- round(obs_times,  digits = 10)
-      times_sim  <- sort(unique(round(c(times_sim, obs_times), digits = 10)))
-      self$times_sim <- times_sim
-      self$params    <- params
-      self$lambda    <- lambda
-      self$n_steps   <- length(times_sim)
-      self$n_vars    <- ncol(obs_values)
-      self$dt_vec    <- c(diff(times_sim), 0)
-      self$method    <- method
-      self$verbose   <- isTRUE(verbose)
+      self$initialize_forward_solver(
+        model = model,
+        times_sim = times_sim,
+        obs_times = obs_times,
+        obs_values = obs_values,
+        params = params,
+        lambda = lambda,
+        method = method,
+        verbose = verbose
+      )
       private$dto_solver <- make_dto_solver(method)
-
-      self$observations_mapped <- matrix(NA, nrow = self$n_steps, ncol = self$n_vars)
-      self$observations_mapped[times_sim %in% obs_times, ] <- obs_values
-      self$y <- matrix(0, self$n_steps, self$n_vars)
-      self$u <- matrix(0, self$n_steps, self$n_vars)
-      self$p <- matrix(0, self$n_steps, self$n_vars)
     },
 
     #' Partial sensitivity matrix S[ns, nv, np]:
@@ -347,70 +323,20 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
 
     optimize_bvp = function(y0, z_init = NULL,
                             max_iter = 50L, tol = 1e-8, verbose = NULL) {
-      ns <- self$n_steps; ny <- self$n_vars
-      if (is.null(verbose)) verbose <- self$verbose
-      jac_fn <- function(y, t) self$model$jacobian_state(y, t, self$params)
-
-      if (length(y0) == 1L && is.na(y0)) {
-        first_row <- which(!is.na(self$observations_mapped[, 1L]))[1L]
-        y0 <- self$observations_mapped[first_row, ]; y0[is.na(y0)] <- 0
-      } else if (any(is.na(y0))) {
-        for (v in seq_len(ny)) {
-          if (is.na(y0[v])) {
-            first_v <- which(!is.na(self$observations_mapped[, v]))[1L]
-            y0[v] <- if (!is.na(first_v)) self$observations_mapped[first_v, v] else 0
-          }
-        }
-      }
-
-      obs_clean   <- self$observations_mapped; obs_clean[is.na(obs_clean)] <- 0
-      obs_mask    <- matrix(as.numeric(!is.na(self$observations_mapped)), ns, ny)
-      two_lam     <- 2 * self$lambda
-      two_over_ns <- 2 / ns
-
-      t_keys  <- as.character(round(self$times_sim, 10))
-      t_lut   <- setNames(seq_len(ns), t_keys)
-      get_idx <- function(t_val) t_lut[[as.character(round(t_val, 10))]]
-
-      F_rhs_inner <- function(t_val, z) {
-        y_t <- z[seq_len(ny)]; p_t <- z[ny + seq_len(ny)]
-        ti  <- get_idx(t_val)
-        fy  <- self$model$rhs(y_t, t_val, self$params)
-        Jfy <- self$model$jacobian_state(y_t, t_val, self$params)
-        c(fy - p_t / two_lam,
-          as.vector(-(t(Jfy) %*% p_t)) -
-            two_over_ns * obs_mask[ti, ] * (y_t - obs_clean[ti, ]))
-      }
-
-      obs_T  <- obs_clean[ns, ]; mask_T <- obs_mask[ns, ]
-      bc_inner <- function(z_l, z_r) {
-        c(z_l[seq_len(ny)] - y0,
-          z_r[ny + seq_len(ny)] - two_over_ns * mask_T * (z_r[seq_len(ny)] - obs_T))
-      }
-
-      if (is.null(z_init)) {
-        euler_dto <- make_dto_solver("euler")
-        rhs_euler <- function(y, t) self$model$rhs(y, t, self$params)
-        y_guess   <- euler_dto$solve_state(rhs_euler, y0, self$times_sim)$y
-        source_fn <- private$make_source_fn(y_guess)
-        pT        <- rep(0, ny)
-        p_guess   <- euler_dto$solve_adjoint(rhs_euler, pT, jac_fn, source_fn)$p
-        z_init    <- cbind(y_guess, p_guess)
-      }
-
-      sol <- solve_bvp_colloc(
-        F_rhs       = F_rhs_inner,
-        bc_residual = bc_inner,
-        t_grid      = self$times_sim,
-        z_init      = z_init,
-        max_iter    = max_iter,
-        tol         = tol,
-        verbose     = verbose
+      bvp <- BvpForwardSolver$new(
+        model = self$model,
+        times_sim = self$times_sim,
+        obs_times = self$times_sim,
+        obs_values = self$observations_mapped,
+        params = self$params,
+        lambda = self$lambda,
+        verbose = if (is.null(verbose)) self$verbose else verbose
       )
 
-      y_sol <- sol$z[, seq_len(ny), drop = FALSE]
-      p_sol <- sol$z[, ny + seq_len(ny), drop = FALSE]
-      self$y <- y_sol; self$p <- p_sol; self$u <- -p_sol / two_lam
+      sol <- bvp$optimize_bvp(y0 = y0, z_init = z_init, max_iter = max_iter, tol = tol)
+      self$y <- bvp$y
+      self$p <- bvp$p
+      self$u <- bvp$u
       sol
     },
 
@@ -419,19 +345,9 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
       if (is.null(verbose)) verbose <- self$verbose
       if (is.null(u_init)) u_init <- rep(0, self$n_steps * self$n_vars)
 
-      if (length(y0) == 1 && is.na(y0)) {
-        first_row <- which(!is.na(self$observations_mapped[, 1]))[1]
-        y0 <- self$observations_mapped[first_row, ]; y0[is.na(y0)] <- 0
-      } else if (any(is.na(y0))) {
-        for (v in seq_len(self$n_vars)) {
-          if (is.na(y0[v])) {
-            first_v <- which(!is.na(self$observations_mapped[, v]))[1]
-            y0[v] <- if (!is.na(first_v)) self$observations_mapped[first_v, v] else 0
-          }
-        }
-      }
+      y0 <- self$sanitize_initial_state(y0)
 
-      private$log_debug("Starting optimization: method=%s max_iter=%d reltol=%.3e",
+      self$log_debug("Starting optimization: method=%s max_iter=%d reltol=%.3e",
             self$method, max_iter, reltol)
       res <- optim(par = u_init, fn = self$cost_function, gr = self$gradient_function,
                    y0 = y0, method = "BFGS",
@@ -446,7 +362,7 @@ DtOForwardSolver <- R6Class("DtOForwardSolver",
         sol <- self$solve_state_adjoint(self$u, y0)
         self$y <- sol$y; self$p <- sol$p
       }
-      private$log_debug("Optimization complete: converged_code=%d final_value=%.6e",
+      self$log_debug("Optimization complete: converged_code=%d final_value=%.6e",
                         res$convergence, res$value)
       res
     }

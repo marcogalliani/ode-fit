@@ -36,7 +36,7 @@ model <- ODEModel$new(
     param_scales = param_scales
 )
 
-tracking <- TrackingOdeSolver$new(
+tracking <- TrackingInverseSolver$new(
 model        = model,
 times_sim    = times_sim,
 obs_times    = obs_times,

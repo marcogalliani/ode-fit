@@ -1,5 +1,5 @@
 # =============================================================================
-# Test suite for TrackingOdeSolver (src/solvers/tracking_inv_solver.R).
+# Test suite for TrackingInverseSolver (src/solvers/tracking_inv_solver.R).
 #
 # WHAT IS TESTED:
 #   TR1.  Outer gradient consistency — random Lotka-Volterra (6 params)
@@ -112,7 +112,7 @@ describe("TR1: Outer gradient consistency — deterministic Lotka-Volterra param
     param_scales = param_scales
   )
 
-  tracking <- TrackingOdeSolver$new(
+  tracking <- TrackingInverseSolver$new(
     model        = model,
     times_sim    = times_sim,
     obs_times    = obs_times,
@@ -185,7 +185,7 @@ describe("TR1a: Outer gradient consistency — deterministic fixed initial condi
     param_scales = param_scales
   )
 
-  tracking <- TrackingOdeSolver$new(
+  tracking <- TrackingInverseSolver$new(
     model        = model,
     times_sim    = times_sim,
     obs_times    = obs_times,

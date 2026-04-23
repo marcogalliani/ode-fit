@@ -6,7 +6,7 @@
 #   F2. Gradient consistency (GL2)
 #   F3. Gradient consistency (GL1)
 #   F4. Load-vector structure
-#   F5. Equivalence with DtOForwardSolver
+#   F5. Equivalence with AdjointForwardSolver
 #   F6. Global K matrix (CN)
 #   F7. Cost monotonicity
 # =============================================================================
@@ -174,9 +174,9 @@ describe("F4: Load-vector assembly — exact point evaluation", {
 })
 
 # ---------------------------------------------------------------------------
-# F5. Equivalence: FEMForwardSolver and DtOForwardSolver give identical gradients
+# F5. Equivalence: FEMForwardSolver and AdjointForwardSolver give identical gradients
 # ---------------------------------------------------------------------------
-describe("F5: FEMForwardSolver == DtOForwardSolver — identical gradients", {
+describe("F5: FEMForwardSolver == AdjointForwardSolver — identical gradients", {
   for (meth in c("cn", "gl1", "gl2")) {
     local({
       m         <- meth
@@ -195,7 +195,7 @@ describe("F5: FEMForwardSolver == DtOForwardSolver — identical gradients", {
         lambda = lam,
         method = m
       )
-      ode <- DtOForwardSolver$new(
+      ode <- AdjointForwardSolver$new(
         model = ODEModel$new(rhs = decay_rhs),
         times_sim = times_sim,
         obs_times = times_sim,

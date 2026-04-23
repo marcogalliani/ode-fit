@@ -51,7 +51,7 @@ safe_fit_solver <- function(method,
   solver <- tryCatch(
     {
       if (identical(method, "tracking")) {
-        TrackingOdeSolver$new(
+        TrackingInverseSolver$new(
           model = model,
           times_sim = times_sim,
           obs_times = obs_times,

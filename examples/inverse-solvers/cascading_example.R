@@ -18,7 +18,7 @@ source("examples/extra/sensitivity-analysis/sensitivity_utils.R")
 # cfg          ODE_CONFIGS entry from examples/ode_models.R.
 # init_params  Named numeric vector: initial guess for the estimated parameters.
 # param_names  Character vector of parameter names to estimate.
-# lambda       Regularisation weight for the inner DtOForwardSolver.
+# lambda       Regularisation weight for the inner AdjointForwardSolver.
 # lower_phys   Named numeric: lower optimisation bounds.
 # upper_phys   Named numeric: upper optimisation bounds.
 # noise_sd     Noise std dev (NULL = auto: 2% of peak signal).

@@ -1,5 +1,5 @@
 # =============================================================================
-# Tests for solve_bvp_colloc and DtOForwardSolver$optimize_bvp.
+# Tests for solve_bvp_colloc and AdjointForwardSolver$optimize_bvp.
 # =============================================================================
 
 setwd("../../..")
@@ -100,7 +100,7 @@ describe("BVC3: optimize_bvp — gradient norm = 0 at solution", {
   y_true <- exp(-k * times)
   obs_v  <- matrix(y_true + rnorm(length(times), sd = 0.05), ncol = 1L)
 
-  solver <- DtOForwardSolver$new(
+  solver <- AdjointForwardSolver$new(
     model      = ODEModel$new(rhs = f_lin),
     times_sim  = times,
     obs_times  = times,
@@ -139,7 +139,7 @@ describe("BVC4: optimize_bvp vs optimize (BFGS) — trajectory agreement", {
   obs_v  <- matrix(y_true + rnorm(length(times), sd = 0.03), ncol = 1L)
 
   make_solver <- function() {
-    DtOForwardSolver$new(
+    AdjointForwardSolver$new(
       model      = ODEModel$new(rhs = f_lin),
       times_sim  = times,
       obs_times  = times,

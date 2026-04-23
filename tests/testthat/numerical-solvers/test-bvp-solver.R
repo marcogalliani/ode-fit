@@ -130,7 +130,7 @@ describe("BV3: gradient_function consistent with FD of cost_function", {
   obs_v  <- matrix(exp(-k * times) + rnorm(length(times), sd = 0.05), ncol = 1)
   lambda <- 0.3
 
-  solver <- DtOForwardSolver$new(
+  solver <- AdjointForwardSolver$new(
     model = ODEModel$new(rhs = f_lin), times_sim = times,
     obs_times = times, obs_values = obs_v,
     params = list(k = k), lambda = lambda

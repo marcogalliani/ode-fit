@@ -12,7 +12,7 @@ main <- function() {
   fixed_params <- params[!names(params) %in% names(param_scales)]
 
   # --- Tracking solver --------------------------------------------------------
-  tracking_solver <- TrackingOdeSolver$new(
+  tracking_solver <- TrackingInverseSolver$new(
     func_rhs     = sb_kref_rhs,
     obs_times    = df_clean$time,
     times_sim    = times_grid,

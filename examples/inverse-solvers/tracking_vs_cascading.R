@@ -10,7 +10,7 @@ source("examples/plot_utils.R")
 
 
 # =============================================================================
-# compare_methods -- run both TrackingOdeSolver and CascadingInverseSolver on the
+# compare_methods -- run both TrackingInverseSolver and CascadingInverseSolver on the
 # same synthetic data and compare parameter recovery, state fit, and convergence
 #
 # Arguments
@@ -62,10 +62,10 @@ compare_methods <- function(cfg,
   regularizing_ode <- build_inverse_solver_model(cfg)
 
   # --- Tracking estimator ---
-  cat("\n=== TrackingOdeSolver  params:", param_names,
+  cat("\n=== TrackingInverseSolver  params:", param_names,
       " lambda =", lambda, "===\n")
   
-  tracking <- TrackingOdeSolver$new(
+  tracking <- TrackingInverseSolver$new(
     model        = regularizing_ode,
     times_sim    = t_sim,
     obs_times    = t_obs,

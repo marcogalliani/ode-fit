@@ -1,5 +1,5 @@
 # =============================================================================
-# Test suite for DtOForwardSolver (src/solvers/dto_fwd_solver.R).
+# Test suite for AdjointForwardSolver (src/solvers/dto_fwd_solver.R).
 # =============================================================================
 
 setwd("../../..")
@@ -69,7 +69,7 @@ describe("T1: Gradient consistency — 1-D exponential decay", {
     y0       <- cfg[["y0"]]
     y_true   <- matrix(y0 * exp(-params$k * times_sim), ncol = 1)
 
-    solver <- DtOForwardSolver$new(
+    solver <- AdjointForwardSolver$new(
       model      = ODEModel$new(rhs = decay_rhs),
       times_sim  = times_sim,
       obs_times  = times_sim,
@@ -154,7 +154,7 @@ describe("T2: Gradient consistency — 2-D Lotka-Volterra", {
     set.seed(500L + trial_seed)
     obs_data <- y_true + matrix(rnorm(length(y_true), 0, 0.2), nrow(y_true), 2)
 
-    solver <- DtOForwardSolver$new(
+    solver <- AdjointForwardSolver$new(
       model      = ODEModel$new(rhs = lv_rhs),
       times_sim  = times_sim,
       obs_times  = times_sim,
@@ -278,7 +278,7 @@ describe("T6: NA handling — observations with missing values", {
   gap_idx <- which(times_sim >= 1.5 & times_sim <= 2.5)
   y_obs[gap_idx, ] <- NA
 
-  solver <- DtOForwardSolver$new(
+  solver <- AdjointForwardSolver$new(
     model      = ODEModel$new(rhs = decay_rhs),
     times_sim  = times_sim,
     obs_times  = times_sim,
@@ -325,7 +325,7 @@ describe("T12: optimize vs optimize_bvp — 1-D decay, cost reduction and trajec
   )
 
   make_solver_10 <- function() {
-    DtOForwardSolver$new(
+    AdjointForwardSolver$new(
       model      = ODEModel$new(rhs = decay_rhs),
       times_sim  = times_sim,
       obs_times  = times_sim,
@@ -381,7 +381,7 @@ describe("T13: optimize vs optimize_bvp — 2-D LV, cost reduction and trajector
   obs_lv_11 <- y_lv_11 + matrix(rnorm(length(y_lv_11), 0, 0.5), nrow(y_lv_11), 2)
 
   make_solver_11 <- function() {
-    DtOForwardSolver$new(
+    AdjointForwardSolver$new(
       model      = ODEModel$new(rhs = lv_rhs),
       times_sim  = times_sim,
       obs_times  = times_sim,
@@ -436,7 +436,7 @@ describe("T14: discrete control Jacobian API across methods", {
     local({
       m <- method
 
-      solver <- DtOForwardSolver$new(
+      solver <- AdjointForwardSolver$new(
         model      = ODEModel$new(rhs = decay_rhs),
         times_sim  = times_sim,
         obs_times  = times_sim,
@@ -483,7 +483,7 @@ describe("T14: discrete control Jacobian API across methods", {
   }
 
   test_that("include_theta = FALSE returns NULL Du_dtheta", {
-    solver <- DtOForwardSolver$new(
+    solver <- AdjointForwardSolver$new(
       model      = ODEModel$new(rhs = decay_rhs),
       times_sim  = times_sim,
       obs_times  = times_sim,

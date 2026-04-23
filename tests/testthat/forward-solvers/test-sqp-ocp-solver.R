@@ -50,7 +50,7 @@ describe("SQP1: 1-D decay — convergence and cost reduction", {
     params = params, lambda = 0.1, y0 = y0
   )
 
-  ref <- DtOForwardSolver$new(
+  ref <- AdjointForwardSolver$new(
     model = ODEModel$new(rhs = .sqp_decay_rhs), times_sim = times_sim,
     obs_times = times_sim, obs_values = obs_data,
     params = params, lambda = 0.1, method = "euler"
@@ -88,7 +88,7 @@ describe("SQP2: 1-D decay — SQP vs BFGS trajectory agreement", {
   )
   sqp$solve(max_iter = 50, tol = 1e-8)
 
-  ref <- DtOForwardSolver$new(
+  ref <- AdjointForwardSolver$new(
     model = ODEModel$new(rhs = .sqp_decay_rhs), times_sim = times_sim,
     obs_times = times_sim, obs_values = obs_data,
     params = params, lambda = 0.1, method = "euler"
@@ -130,7 +130,7 @@ describe("SQP3: 2-D Lotka-Volterra — convergence and BFGS agreement", {
   )
   sol <- sqp$solve(max_iter = 50, tol = 1e-6)
 
-  ref <- DtOForwardSolver$new(
+  ref <- AdjointForwardSolver$new(
     model = ODEModel$new(rhs = .sqp_lv_rhs), times_sim = times_sim,
     obs_times = times_sim, obs_values = obs_data,
     params = params, lambda = 0.1, method = "euler"
