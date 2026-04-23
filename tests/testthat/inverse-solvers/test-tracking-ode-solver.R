@@ -58,12 +58,12 @@ check_outer_gradient <- function(tracking, theta_test, seed = 11L) {
 
   set.seed(seed)
   adj_chk <- safe_chk(
-    function(theta, param_names) tracking$outer_gradient(theta, param_names)
+    function(theta, param_names) tracking$outer_gradient(theta, param_names, gradient_mode = "adjoint")
   )
 
   set.seed(seed)
   sens_chk <- safe_chk(
-    function(theta, param_names) tracking$outer_gradient_sensitivity(theta, param_names)
+    function(theta, param_names) tracking$outer_gradient(theta, param_names, gradient_mode = "sensitivity")
   )
 
   list(
