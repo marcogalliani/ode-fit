@@ -145,7 +145,7 @@ run_consistency_study <- function(n_obs_grid = c(6, 11, 16, 21, 31, 41, 51),
                                   noise_frac = 0.05,
                                   out_dir = "simulations/inverse-solvers-consistency/results",
                                   inner_method = "cn",
-                                  inner_max_iter = 200,
+                                  inner_max_iter = 100,
                                   show_progress = TRUE) {
   set.seed(seed)
 
@@ -240,10 +240,10 @@ run_consistency_study <- function(n_obs_grid = c(6, 11, 16, 21, 31, 41, 51),
           beta = est[["beta"]],
           delta = est[["delta"]],
           gamma = est[["gamma"]],
-          err_alpha = err[["alpha"]],
-          err_beta = err[["beta"]],
-          err_delta = err[["delta"]],
-          err_gamma = err[["gamma"]],
+          err_alpha = sqrt(sum(err[["alpha"]]^2)),
+          err_beta = sqrt(sum(err[["beta"]]^2)),
+          err_delta = sqrt(sum(err[["delta"]]^2)),
+          err_gamma = sqrt(sum(err[["gamma"]]^2)),
           l2_error = sqrt(sum(err^2)),
           error_msg = fit$error,
           stringsAsFactors = FALSE
@@ -329,8 +329,8 @@ run_consistency_study <- function(n_obs_grid = c(6, 11, 16, 21, 31, 41, 51),
 main <- function() {
   args <- commandArgs(trailingOnly = TRUE)
 
-  n_rep <- 30
-  n_obs_grid <- c(51,101,256,501)
+  n_rep <- 10
+  n_obs_grid <- c(101, 201, 301)
   inner_max_iter <- 100
   if (length(args) >= 1L) {
     maybe_rep <- suppressWarnings(as.integer(args[[1L]]))

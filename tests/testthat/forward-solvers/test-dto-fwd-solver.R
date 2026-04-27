@@ -1,5 +1,5 @@
 # =============================================================================
-# Test suite for AdjointForwardSolver (src/solvers/dto_fwd_solver.R).
+# Test suite for AdjointForwardSolver (src/solvers/adj_fwd_solver.R).
 # =============================================================================
 
 setwd("../../..")

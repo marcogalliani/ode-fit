@@ -58,7 +58,7 @@ $$
 \end{cases}
 $$
 
-The inner gradient is then fed into an appropriate optimisation algorithm to converge to the optimum. This optimisation scheme is implemented within `src/solvers/forward-solvers/dto_fwd_solver.R`, more details on this solver are provided below.
+The inner gradient is then fed into an appropriate optimisation algorithm to converge to the optimum. This optimisation scheme is implemented within `src/solvers/forward-solvers/adj_fwd_solver.R`, more details on this solver are provided below.
 
 On the other hand, the outer gradient is computed relying on the implicit function theorem. To see why, consider gradient of the outer error criterion expanded through the chain rule
 
@@ -79,7 +79,7 @@ $$
 
 
 ### Tracking estimator
-The tracking estimator is based on the works of [(Brunel and Clairon, 2015)](https://doi.org/10.48550/arXiv.1410.7554), [(Clairon and Brunel,2018)](https://doi.org/10.1080/01621459.2017.1319841) and is implemented in `src/solvers/inverse-solvers/tracking_inv_solver.R`. The approach is quite similar to parameter cascading. Actually, it can be considered as a parameter cascading having the same optimisation criterion $J(u,\theta)$ both for the inner and the outer problem, namely $H(\theta)=\min_{u}J(u,\theta)$. For this reason, the solution of the inner problem is delegated to the same solver (`src/solvers/forward-solvers/dto_fwd_solver.R`) used by parameter cascading. 
+The tracking estimator is based on the works of [(Brunel and Clairon, 2015)](https://doi.org/10.48550/arXiv.1410.7554), [(Clairon and Brunel,2018)](https://doi.org/10.1080/01621459.2017.1319841) and is implemented in `src/solvers/inverse-solvers/tracking_inv_solver.R`. The approach is quite similar to parameter cascading. Actually, it can be considered as a parameter cascading having the same optimisation criterion $J(u,\theta)$ both for the inner and the outer problem, namely $H(\theta)=\min_{u}J(u,\theta)$. For this reason, the solution of the inner problem is delegated to the same solver (`src/solvers/forward-solvers/adj_fwd_solver.R`) used by parameter cascading. 
 
 The slight modification made to the outer optimisation cost allows for simplified gradient computation and a nice interpretation of the optimisation procedure. Let's start by looking at the gradient: 
 
@@ -96,7 +96,7 @@ Another interesting aspect is the interpretation of the optimisation procedure a
 
 ### The inner solver
 
-The inner problem is solved by the discretize-then-optimize (DtO) solver in `src/solvers/forward-solvers/dto_fwd_solver.R`, with scheme implementations in `src/solvers/numerical-solvers/ode_solvers.R`.
+The inner problem is solved by the discretize-then-optimize (DtO) solver in `src/solvers/forward-solvers/adj_fwd_solver.R`, with scheme implementations in `src/solvers/numerical-solvers/ode_solvers.R`.
 
 #### Discrete control defect and its linearization (core fix)
 
