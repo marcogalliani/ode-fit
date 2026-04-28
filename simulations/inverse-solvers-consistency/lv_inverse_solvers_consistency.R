@@ -1,9 +1,5 @@
 #!/usr/bin/env Rscript
 
-suppressPackageStartupMessages({
-  library(ggplot2)
-})
-
 # Ensure relative source() calls work regardless of invocation directory.
 argv <- commandArgs(trailingOnly = FALSE)
 file_arg <- grep("^--file=", argv, value = TRUE)
@@ -29,10 +25,14 @@ euler_solve <- function(rhs, y0, times, params) {
   out
 }
 
-make_obs_index <- function(n_times, n_obs) {
-  idx <- round(seq(1, n_times, length.out = n_obs))
-  sort(unique(as.integer(idx)))
+sample_obs_times_uniform <- function(n_obs, t_min, t_max) {
+  if (n_obs <= 0L) {
+    return(numeric(0))
+  }
+  sort(runif(n_obs, min = t_min, max = t_max))
 }
+
+VERBOSE <- T
 
 safe_fit_solver <- function(method,
                             model,
@@ -45,7 +45,8 @@ safe_fit_solver <- function(method,
                             upper_phys,
                             lambda,
                             inner_method,
-                            inner_max_iter) {
+                            inner_max_iter,
+                            verbose = FALSE) {
   t0 <- proc.time()[["elapsed"]]
 
   solver <- tryCatch(
@@ -59,7 +60,7 @@ safe_fit_solver <- function(method,
           lambda = lambda,
           inner_method = inner_method,
           inner_max_iter = inner_max_iter,
-          verbose = F
+          verbose = verbose
         )
       } else {
         CascadingInverseSolver$new(
@@ -70,7 +71,7 @@ safe_fit_solver <- function(method,
           lambda = lambda,
           inner_method = inner_method,
           inner_max_iter = inner_max_iter,
-          verbose = F
+          verbose = verbose
         )
       }
     },
@@ -142,19 +143,18 @@ safe_fit_solver <- function(method,
 run_consistency_study <- function(n_obs_grid = c(6, 11, 16, 21, 31, 41, 51),
                                   n_rep = 30,
                                   seed = 123,
-                                  noise_frac = 0.05,
+                                  noise_frac = 0.1,
                                   out_dir = "simulations/inverse-solvers-consistency/results",
                                   inner_method = "cn",
                                   inner_max_iter = 100,
                                   show_progress = TRUE) {
   set.seed(seed)
 
-  times_sim <- seq(0, 3, by = 0.01)
-  n_times <- length(times_sim)
-  n_obs_grid <- sort(unique(as.integer(n_obs_grid[n_obs_grid >= 2 & n_obs_grid <= n_times])))
+  times_sim <- seq(0, 3, by = 0.02)
+  n_obs_grid <- sort(unique(as.integer(n_obs_grid[n_obs_grid >= 2])))
   
   if (length(n_obs_grid) == 0L) {
-    stop("n_obs_grid must contain values in [2, length(times_sim)]")
+    stop("n_obs_grid must contain values >= 2")
   }
 
   p_true <- c(alpha = 1.20, beta = 0.45, delta = 0.12, gamma = 0.80, x0 = 10.0, y0 = 8.0)
@@ -177,7 +177,7 @@ run_consistency_study <- function(n_obs_grid = c(6, 11, 16, 21, 31, 41, 51),
   )
 
   methods <- c("tracking", "cascading")
-  lambda_map <- c(tracking = 1e1, cascading = 1e1)
+  lambda_map <- c(tracking = 1e2, cascading = 1e2)
 
   rows <- vector("list", length(methods) * length(n_obs_grid) * n_rep)
   row_id <- 1L
@@ -197,11 +197,17 @@ run_consistency_study <- function(n_obs_grid = c(6, 11, 16, 21, 31, 41, 51),
   }
 
   for (n_obs in n_obs_grid) {
-    idx <- make_obs_index(n_times, n_obs)
-    obs_times <- times_sim[idx]
-    obs_true <- y_true[idx, , drop = FALSE]
-
     for (rep_id in seq_len(n_rep)) {
+      obs_times <- sample_obs_times_uniform(
+        n_obs = n_obs,
+        t_min = min(times_sim),
+        t_max = max(times_sim)
+      )
+      times_sim_aug <- sort(unique(c(times_sim, obs_times)))
+      y_true_aug <- euler_solve(lv_rhs, y0_true, times_sim_aug, as.list(p_true))
+      obs_idx <- match(obs_times, times_sim_aug)
+      obs_true <- y_true_aug[obs_idx, , drop = FALSE]
+
       noise_mat <- matrix(
         rnorm(length(obs_true), mean = 0, sd = rep(noise_sd, each = nrow(obs_true))),
         nrow = nrow(obs_true),
@@ -213,7 +219,7 @@ run_consistency_study <- function(n_obs_grid = c(6, 11, 16, 21, 31, 41, 51),
         fit <- safe_fit_solver(
           method = method,
           model = model,
-          times_sim = times_sim,
+          times_sim = times_sim_aug,
           obs_times = obs_times,
           obs_values = obs_values,
           init_theta = theta_init,
@@ -284,36 +290,6 @@ run_consistency_study <- function(n_obs_grid = c(6, 11, 16, 21, 31, 41, 51),
   write.csv(sum_l2, file.path(out_dir, "lv_consistency_summary_l2.csv"), row.names = FALSE)
   write.csv(sum_param, file.path(out_dir, "lv_consistency_summary_params.csv"), row.names = FALSE)
 
-  p_l2 <- ggplot(sum_l2, aes(x = n_obs, y = l2_mean, color = method)) +
-    geom_line(linewidth = 0.9) +
-    geom_point(size = 2) +
-    geom_errorbar(aes(ymin = pmax(l2_mean - l2_sd, 0), ymax = l2_mean + l2_sd), width = 0.6) +
-    labs(
-      title = "Lotka-Volterra consistency: total parameter error",
-      x = "Number of observations",
-      y = "Mean L2 error across parameters",
-      color = "Method"
-    ) +
-    theme_minimal(base_size = 12)
-
-  p_param <- ggplot(sum_param, aes(x = n_obs, y = abs_err_mean, color = method)) +
-    geom_line(linewidth = 0.9) +
-    geom_point(size = 1.8) +
-    geom_errorbar(aes(ymin = pmax(abs_err_mean - abs_err_sd, 0), ymax = abs_err_mean + abs_err_sd), width = 0.6) +
-    facet_wrap(~ param, scales = "free_y") +
-    labs(
-      title = "Lotka-Volterra consistency: parameter-wise absolute error",
-      x = "Number of observations",
-      y = "Mean absolute error",
-      color = "Method"
-    ) +
-    theme_minimal(base_size = 12)
-
-  ggsave(filename = file.path(out_dir, "lv_consistency_l2_error.png"), plot = p_l2,
-         width = 8, height = 5, dpi = 140)
-  ggsave(filename = file.path(out_dir, "lv_consistency_param_errors.png"), plot = p_param,
-         width = 9, height = 6, dpi = 140)
-
   fail_tab <- aggregate(ok ~ method + n_obs, data = res_raw, FUN = function(x) sum(!x))
   names(fail_tab)[3] <- "n_fail"
 
@@ -330,7 +306,7 @@ main <- function() {
   args <- commandArgs(trailingOnly = TRUE)
 
   n_rep <- 10
-  n_obs_grid <- c(101, 201, 301)
+  n_obs_grid <- c(101, 301, 501)
   inner_max_iter <- 100
   if (length(args) >= 1L) {
     maybe_rep <- suppressWarnings(as.integer(args[[1L]]))
